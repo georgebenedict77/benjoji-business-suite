@@ -6122,9 +6122,11 @@ function formDataObject(form) {
 }
 
 function paymentOptions(selectedMethod) {
-  return availablePaymentMethods()
-    .map((method) => `<option value="${escapeAttr(method)}" ${method === selectedMethod ? "selected" : ""}>${escapeHtml(method)}</option>`)
-    .join("");
+  let html = "";
+  for (const method of availablePaymentMethods()) {
+    html += `<option value="${escapeAttr(method)}" ${method === selectedMethod ? "selected" : ""}>${escapeHtml(method)}</option>`;
+  }
+  return html;
 }
 
 function buildWorkspaceSetupPayload(form) {
@@ -6150,16 +6152,17 @@ function buildWorkspaceSetupPayload(form) {
 function buildPaymentProfilePayload(form) {
   const data = formDataObject(form);
   const enabledMethods = normalizeArray(data.enabledMethods);
+  const routes = {};
+  for (const method of PAYMENT_METHODS) {
+    routes[method] = {
+      label: data[`route_${method}_label`] || "",
+      targetNumber: data[`route_${method}_target`] || "",
+      accountName: data[`route_${method}_account`] || "",
+    };
+  }
   return {
     enabledMethods,
-    routes: PAYMENT_METHODS.reduce((acc, method) => {
-      acc[method] = {
-        label: data[`route_${method}_label`] || "",
-        targetNumber: data[`route_${method}_target`] || "",
-        accountName: data[`route_${method}_account`] || "",
-      };
-      return acc;
-    }, {}),
+    routes,
   };
 }
 
@@ -6190,8 +6193,12 @@ function buildComplianceProfilePayload(form) {
 }
 
 function normalizeArray(value) {
-  if (Array.isArray(value)) return value;
-  if (value === undefined || value === null || value === "") return [];
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
   return [value];
 }
 
@@ -6201,9 +6208,12 @@ function checkboxValue(form, name) {
 }
 
 function paymentDetail(payment) {
-  return [payment.customerPhone, payment.targetNumber, payment.accountReference, payment.paymentPurpose]
-    .filter(Boolean)
-    .join(" | ");
+  const parts = [];
+  if (payment.customerPhone) parts.push(payment.customerPhone);
+  if (payment.targetNumber) parts.push(payment.targetNumber);
+  if (payment.accountReference) parts.push(payment.accountReference);
+  if (payment.paymentPurpose) parts.push(payment.paymentPurpose);
+  return parts.join(" | ");
 }
 
 function money(value) {

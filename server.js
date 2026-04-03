@@ -63,10 +63,11 @@ function ownerOnly(user, message = "Only the owner can perform this action.") {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const route = `${req.method} ${url.pathname}`;
-    const isApiCall = url.pathname.startsWith("/api/");
+    const method = req.method;
+    const pathName = url.pathname;
+    const isApiCall = pathName.startsWith("/api/");
 
-    if (route === "GET /api/bootstrap") {
+    if (method === "GET" && pathName === "/api/bootstrap") {
       const user = getCurrentUser(req);
       const workspaceKey = user?.workspaceKey || getWorkspaceKey(req);
       const workspaces = listWorkspaceSummaries();
@@ -82,7 +83,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (route === "GET /api/health") {
+    if (method === "GET" && pathName === "/api/health") {
       return sendJson(res, 200, {
         status: "ok",
         product: "Benjoji Business Suite",
@@ -96,7 +97,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (route === "POST /api/auth/register") {
+    if (method === "POST" && pathName === "/api/auth/register") {
       const body = await readJson(req);
       if (body.password !== body.confirmPassword) {
         return sendError(res, 400, "Passwords do not match.");
@@ -140,7 +141,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (route === "POST /api/auth/register-user") {
+    if (method === "POST" && pathName === "/api/auth/register-user") {
       const currentUser = getCurrentUser(req);
       if (!currentUser) {
         return sendError(res, 401, "Please log in to continue.");
@@ -174,7 +175,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (route === "POST /api/auth/login") {
+    if (method === "POST" && pathName === "/api/auth/login") {
       const body = await readJson(req);
       const result = beginLogin(req, res, body);
       return sendJson(res, 200, {
@@ -184,13 +185,13 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (route === "POST /api/auth/login/verify-second-factor") {
+    if (method === "POST" && pathName === "/api/auth/login/verify-second-factor") {
       const body = await readJson(req);
       const user = completeSecondFactorLogin(req, res, body);
       return sendJson(res, 200, { message: "Login successful.", user, businessName: getBusinessName(user.workspaceKey) });
     }
 
-    if (route === "POST /api/auth/verify") {
+    if (method === "POST" && pathName === "/api/auth/verify") {
       const currentUser = getCurrentUser(req);
       if (!currentUser) {
         return sendError(res, 401, "Please log in to continue.");
@@ -210,7 +211,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { message: "Verification successful." });
     }
 
-    if (route === "POST /api/auth/logout") {
+    if (method === "POST" && pathName === "/api/auth/logout") {
       destroySession(req, res);
       return sendJson(res, 200, { message: "Logged out." });
     }
@@ -222,38 +223,38 @@ const server = http.createServer(async (req, res) => {
 
     const workspaceKey = user?.workspaceKey;
 
-    if (route === "GET /api/dashboard") {
+    if (method === "GET" && pathName === "/api/dashboard") {
       return sendJson(res, 200, getDashboardSummary(workspaceKey));
     }
-    if (route === "GET /api/products") {
+    if (method === "GET" && pathName === "/api/products") {
       return sendJson(res, 200, { products: listProducts(workspaceKey) });
     }
-    if (route === "GET /api/stock") {
+    if (method === "GET" && pathName === "/api/stock") {
       return sendJson(res, 200, { stockRecords: listStockRecords(workspaceKey) });
     }
-    if (route === "GET /api/sales") {
+    if (method === "GET" && pathName === "/api/sales") {
       return sendJson(res, 200, { sales: listSales(workspaceKey) });
     }
-    if (route === "GET /api/credits") {
+    if (method === "GET" && pathName === "/api/credits") {
       return sendJson(res, 200, { credits: listCredits(workspaceKey), openCredits: listOpenCredits(workspaceKey) });
     }
-    if (route === "GET /api/accounting") {
+    if (method === "GET" && pathName === "/api/accounting") {
       return sendJson(res, 200, buildAccountingSummary(workspaceKey));
     }
-    if (route === "GET /api/payments") {
+    if (method === "GET" && pathName === "/api/payments") {
       return sendJson(res, 200, { paymentLedger: listPaymentLedger(workspaceKey) });
     }
-    if (route === "GET /api/users") {
+    if (method === "GET" && pathName === "/api/users") {
       if (user.role !== "OWNER") {
         return sendError(res, 403, "Only the owner can access this area.");
       }
       return sendJson(res, 200, { users: listUsers(workspaceKey) });
     }
-    if (route === "GET /api/admin/control-center") {
+    if (method === "GET" && pathName === "/api/admin/control-center") {
       ownerOnly(user, "Only the owner can access the control center.");
       return sendJson(res, 200, getOwnerControlCenter(workspaceKey));
     }
-    if (route === "PUT /api/admin/business-profile") {
+    if (method === "PUT" && pathName === "/api/admin/business-profile") {
       ownerOnly(user, "Only the owner can update business profile settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
@@ -263,7 +264,7 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (route === "PUT /api/admin/receipt-profile") {
+    if (method === "PUT" && pathName === "/api/admin/receipt-profile") {
       ownerOnly(user, "Only the owner can update receipt settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
@@ -272,7 +273,7 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (route === "PUT /api/admin/payment-profile") {
+    if (method === "PUT" && pathName === "/api/admin/payment-profile") {
       ownerOnly(user, "Only the owner can update payment routing.");
       const body = await readJson(req);
       return sendJson(res, 200, {
@@ -281,7 +282,7 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (route === "PUT /api/admin/security-policy") {
+    if (method === "PUT" && pathName === "/api/admin/security-policy") {
       ownerOnly(user, "Only the owner can update security settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
@@ -290,7 +291,7 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (route === "PUT /api/admin/compliance-profile") {
+    if (method === "PUT" && pathName === "/api/admin/compliance-profile") {
       ownerOnly(user, "Only the owner can update compliance settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
@@ -299,7 +300,7 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (route === "POST /api/admin/backups") {
+    if (method === "POST" && pathName === "/api/admin/backups") {
       ownerOnly(user, "Only the owner can create backup snapshots.");
       const body = await readJson(req);
       return sendJson(res, 201, {
@@ -308,7 +309,7 @@ const server = http.createServer(async (req, res) => {
         backups: getOwnerControlCenter(workspaceKey).backups,
       });
     }
-    if (route === "POST /api/admin/backups/restore") {
+    if (method === "POST" && pathName === "/api/admin/backups/restore") {
       ownerOnly(user, "Only the owner can restore backup snapshots.");
       const body = await readJson(req);
       const restore = restoreBackupSnapshot(workspaceKey, body.fileName, user.fullName);
@@ -319,7 +320,7 @@ const server = http.createServer(async (req, res) => {
         requiresRelogin: true,
       });
     }
-    if (route === "GET /api/admin/backups/download") {
+    if (method === "GET" && pathName === "/api/admin/backups/download") {
       ownerOnly(user, "Only the owner can download backup snapshots.");
       const backup = getBackupSnapshot(workspaceKey, url.searchParams.get("fileName"));
       const body = JSON.stringify(backup.snapshot, null, 2);
@@ -330,7 +331,7 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end(body);
     }
-    if (route === "POST /api/products") {
+    if (method === "POST" && pathName === "/api/products") {
       ownerOnly(user, "Only the owner can create products.");
       const body = await readJson(req);
       addOrStockInProduct(workspaceKey, {
@@ -342,9 +343,9 @@ const server = http.createServer(async (req, res) => {
       });
       return sendJson(res, 201, { message: "Inventory updated successfully." });
     }
-    if (req.method === "PUT" && /^\/api\/products\/[^/]+$/.test(url.pathname)) {
+    if (method === "PUT" && /^\/api\/products\/[^/]+$/.test(pathName)) {
       ownerOnly(user, "Only the owner can edit product details.");
-      const productId = decodeURIComponent(url.pathname.split("/").pop());
+      const productId = decodeURIComponent(pathName.split("/").pop());
       const body = await readJson(req);
       updateProductDetails(workspaceKey, {
         productId,
@@ -354,9 +355,9 @@ const server = http.createServer(async (req, res) => {
       });
       return sendJson(res, 200, { message: "Product updated successfully." });
     }
-    if (req.method === "POST" && /^\/api\/products\/[^/]+\/stock$/.test(url.pathname)) {
+    if (method === "POST" && /^\/api\/products\/[^/]+\/stock$/.test(pathName)) {
       ownerOnly(user, "Only the owner can adjust stock records.");
-      const parts = url.pathname.split("/");
+      const parts = pathName.split("/");
       const productId = decodeURIComponent(parts[3]);
       const body = await readJson(req);
       adjustProductStock(workspaceKey, {
@@ -367,7 +368,7 @@ const server = http.createServer(async (req, res) => {
       });
       return sendJson(res, 200, { message: "Stock updated successfully." });
     }
-    if (route === "POST /api/sales") {
+    if (method === "POST" && pathName === "/api/sales") {
       const body = await readJson(req);
       return sendJson(res, 201, {
         message: "Sale completed successfully.",
@@ -380,7 +381,7 @@ const server = http.createServer(async (req, res) => {
         }),
       });
     }
-    if (route === "POST /api/credits/pay") {
+    if (method === "POST" && pathName === "/api/credits/pay") {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Debt payment processed successfully.",
@@ -390,21 +391,21 @@ const server = http.createServer(async (req, res) => {
         }),
       });
     }
-    if (route === "GET /api/reports/daily") {
+    if (method === "GET" && pathName === "/api/reports/daily") {
       return sendJson(res, 200, buildReport(workspaceKey, "daily", url.searchParams.get("date")));
     }
-    if (route === "GET /api/reports/weekly") {
+    if (method === "GET" && pathName === "/api/reports/weekly") {
       return sendJson(res, 200, buildReport(workspaceKey, "weekly", url.searchParams.get("date")));
     }
-    if (route === "GET /api/reports/monthly") {
+    if (method === "GET" && pathName === "/api/reports/monthly") {
       return sendJson(res, 200, buildReport(workspaceKey, "monthly", url.searchParams.get("date")));
     }
-    if (route === "GET /api/reports/annual") {
+    if (method === "GET" && pathName === "/api/reports/annual") {
       return sendJson(res, 200, buildReport(workspaceKey, "annual", url.searchParams.get("date")));
     }
 
-    if (req.method === "GET" && !isApiCall) {
-      return serveStatic(url.pathname, res);
+    if (method === "GET" && !isApiCall) {
+      return serveStatic(pathName, res);
     }
 
     return sendError(res, 404, "Not found.");
