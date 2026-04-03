@@ -1,0 +1,31 @@
+{
+  "explorer.excludeGitIgnore": true,
+  "files.exclude": {
+    "**/.edge-headless": true,
+    "**/data": true,
+    "**/data-test": true,
+    "**/dist": true,
+    "**/out": true,
+    "**/sandbox-data": true,
+    "**/sandbox-data-reports": true,
+    "README.updated.md": true
+  },
+  "search.exclude": {
+    "**/.edge-headless": true,
+    "**/data": true,
+    "**/data-test": true,
+    "**/dist": true,
+    "**/out": true,
+    "**/sandbox-data": true,
+    "**/sandbox-data-reports": true
+  },
+  "files.watcherExclude": {
+    "**/.edge-headless/**": true,
+    "**/data/**": true,
+    "**/data-test/**": true,
+    "**/dist/**": true,
+    "**/out/**": true,
+    "**/sandbox-data/**": true,
+    "**/sandbox-data-reports/**": true
+  }
+}
