@@ -48,10 +48,11 @@ const {
 const { readJson, sendError, sendJson, serveStatic } = require("./lib/http");
 const { normalizeRole, optionalText, requireText } = require("./lib/utils");
 
+// Keep localhost for normal laptop use, but open up in production hosting.
 const HOST = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 const PORT = Number(process.env.PORT || 3000);
 
-function requireOwner(user, message = "Only the owner can perform this action.") {
+function ownerOnly(user, message = "Only the owner can perform this action.") {
   if (!user || user.role !== "OWNER") {
     const error = new Error(message);
     error.statusCode = 403;
@@ -62,9 +63,10 @@ function requireOwner(user, message = "Only the owner can perform this action.")
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const routeKey = `${req.method} ${url.pathname}`;
+    const route = `${req.method} ${url.pathname}`;
+    const isApiCall = url.pathname.startsWith("/api/");
 
-    if (routeKey === "GET /api/bootstrap") {
+    if (route === "GET /api/bootstrap") {
       const user = getCurrentUser(req);
       const workspaceKey = user?.workspaceKey || getWorkspaceKey(req);
       const workspaces = listWorkspaceSummaries();
@@ -80,7 +82,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (routeKey === "GET /api/health") {
+    if (route === "GET /api/health") {
       return sendJson(res, 200, {
         status: "ok",
         product: "Benjoji Business Suite",
@@ -94,7 +96,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (routeKey === "POST /api/auth/register") {
+    if (route === "POST /api/auth/register") {
       const body = await readJson(req);
       if (body.password !== body.confirmPassword) {
         return sendError(res, 400, "Passwords do not match.");
@@ -138,12 +140,12 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (routeKey === "POST /api/auth/register-user") {
+    if (route === "POST /api/auth/register-user") {
       const currentUser = getCurrentUser(req);
       if (!currentUser) {
         return sendError(res, 401, "Please log in to continue.");
       }
-      requireOwner(currentUser, "Only the owner can create additional accounts.");
+      ownerOnly(currentUser, "Only the owner can create additional accounts.");
       const body = await readJson(req);
       if (body.password !== body.confirmPassword) {
         return sendError(res, 400, "Passwords do not match.");
@@ -172,7 +174,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (routeKey === "POST /api/auth/login") {
+    if (route === "POST /api/auth/login") {
       const body = await readJson(req);
       const result = beginLogin(req, res, body);
       return sendJson(res, 200, {
@@ -182,13 +184,13 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (routeKey === "POST /api/auth/login/verify-second-factor") {
+    if (route === "POST /api/auth/login/verify-second-factor") {
       const body = await readJson(req);
       const user = completeSecondFactorLogin(req, res, body);
       return sendJson(res, 200, { message: "Login successful.", user, businessName: getBusinessName(user.workspaceKey) });
     }
 
-    if (routeKey === "POST /api/auth/verify") {
+    if (route === "POST /api/auth/verify") {
       const currentUser = getCurrentUser(req);
       if (!currentUser) {
         return sendError(res, 401, "Please log in to continue.");
@@ -208,51 +210,51 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { message: "Verification successful." });
     }
 
-    if (routeKey === "POST /api/auth/logout") {
+    if (route === "POST /api/auth/logout") {
       destroySession(req, res);
       return sendJson(res, 200, { message: "Logged out." });
     }
 
     const user = getCurrentUser(req);
-    if (url.pathname.startsWith("/api/") && !user) {
+    if (isApiCall && !user) {
       return sendError(res, 401, "Please log in to continue.");
     }
 
     const workspaceKey = user?.workspaceKey;
 
-    if (routeKey === "GET /api/dashboard") {
+    if (route === "GET /api/dashboard") {
       return sendJson(res, 200, getDashboardSummary(workspaceKey));
     }
-    if (routeKey === "GET /api/products") {
+    if (route === "GET /api/products") {
       return sendJson(res, 200, { products: listProducts(workspaceKey) });
     }
-    if (routeKey === "GET /api/stock") {
+    if (route === "GET /api/stock") {
       return sendJson(res, 200, { stockRecords: listStockRecords(workspaceKey) });
     }
-    if (routeKey === "GET /api/sales") {
+    if (route === "GET /api/sales") {
       return sendJson(res, 200, { sales: listSales(workspaceKey) });
     }
-    if (routeKey === "GET /api/credits") {
+    if (route === "GET /api/credits") {
       return sendJson(res, 200, { credits: listCredits(workspaceKey), openCredits: listOpenCredits(workspaceKey) });
     }
-    if (routeKey === "GET /api/accounting") {
+    if (route === "GET /api/accounting") {
       return sendJson(res, 200, buildAccountingSummary(workspaceKey));
     }
-    if (routeKey === "GET /api/payments") {
+    if (route === "GET /api/payments") {
       return sendJson(res, 200, { paymentLedger: listPaymentLedger(workspaceKey) });
     }
-    if (routeKey === "GET /api/users") {
+    if (route === "GET /api/users") {
       if (user.role !== "OWNER") {
         return sendError(res, 403, "Only the owner can access this area.");
       }
       return sendJson(res, 200, { users: listUsers(workspaceKey) });
     }
-    if (routeKey === "GET /api/admin/control-center") {
-      requireOwner(user, "Only the owner can access the control center.");
+    if (route === "GET /api/admin/control-center") {
+      ownerOnly(user, "Only the owner can access the control center.");
       return sendJson(res, 200, getOwnerControlCenter(workspaceKey));
     }
-    if (routeKey === "PUT /api/admin/business-profile") {
-      requireOwner(user, "Only the owner can update business profile settings.");
+    if (route === "PUT /api/admin/business-profile") {
+      ownerOnly(user, "Only the owner can update business profile settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Business profile updated successfully.",
@@ -261,8 +263,8 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (routeKey === "PUT /api/admin/receipt-profile") {
-      requireOwner(user, "Only the owner can update receipt settings.");
+    if (route === "PUT /api/admin/receipt-profile") {
+      ownerOnly(user, "Only the owner can update receipt settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Receipt profile updated successfully.",
@@ -270,8 +272,8 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (routeKey === "PUT /api/admin/payment-profile") {
-      requireOwner(user, "Only the owner can update payment routing.");
+    if (route === "PUT /api/admin/payment-profile") {
+      ownerOnly(user, "Only the owner can update payment routing.");
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Payment routing updated successfully.",
@@ -279,8 +281,8 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (routeKey === "PUT /api/admin/security-policy") {
-      requireOwner(user, "Only the owner can update security settings.");
+    if (route === "PUT /api/admin/security-policy") {
+      ownerOnly(user, "Only the owner can update security settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Security policy updated successfully.",
@@ -288,8 +290,8 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (routeKey === "PUT /api/admin/compliance-profile") {
-      requireOwner(user, "Only the owner can update compliance settings.");
+    if (route === "PUT /api/admin/compliance-profile") {
+      ownerOnly(user, "Only the owner can update compliance settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Compliance profile updated successfully.",
@@ -297,8 +299,8 @@ const server = http.createServer(async (req, res) => {
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
-    if (routeKey === "POST /api/admin/backups") {
-      requireOwner(user, "Only the owner can create backup snapshots.");
+    if (route === "POST /api/admin/backups") {
+      ownerOnly(user, "Only the owner can create backup snapshots.");
       const body = await readJson(req);
       return sendJson(res, 201, {
         message: "Backup snapshot created successfully.",
@@ -306,8 +308,8 @@ const server = http.createServer(async (req, res) => {
         backups: getOwnerControlCenter(workspaceKey).backups,
       });
     }
-    if (routeKey === "POST /api/admin/backups/restore") {
-      requireOwner(user, "Only the owner can restore backup snapshots.");
+    if (route === "POST /api/admin/backups/restore") {
+      ownerOnly(user, "Only the owner can restore backup snapshots.");
       const body = await readJson(req);
       const restore = restoreBackupSnapshot(workspaceKey, body.fileName, user.fullName);
       destroySession(req, res);
@@ -317,8 +319,8 @@ const server = http.createServer(async (req, res) => {
         requiresRelogin: true,
       });
     }
-    if (routeKey === "GET /api/admin/backups/download") {
-      requireOwner(user, "Only the owner can download backup snapshots.");
+    if (route === "GET /api/admin/backups/download") {
+      ownerOnly(user, "Only the owner can download backup snapshots.");
       const backup = getBackupSnapshot(workspaceKey, url.searchParams.get("fileName"));
       const body = JSON.stringify(backup.snapshot, null, 2);
       res.writeHead(200, {
@@ -328,8 +330,8 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end(body);
     }
-    if (routeKey === "POST /api/products") {
-      requireOwner(user, "Only the owner can create products.");
+    if (route === "POST /api/products") {
+      ownerOnly(user, "Only the owner can create products.");
       const body = await readJson(req);
       addOrStockInProduct(workspaceKey, {
         name: body.name,
@@ -341,7 +343,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { message: "Inventory updated successfully." });
     }
     if (req.method === "PUT" && /^\/api\/products\/[^/]+$/.test(url.pathname)) {
-      requireOwner(user, "Only the owner can edit product details.");
+      ownerOnly(user, "Only the owner can edit product details.");
       const productId = decodeURIComponent(url.pathname.split("/").pop());
       const body = await readJson(req);
       updateProductDetails(workspaceKey, {
@@ -353,7 +355,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { message: "Product updated successfully." });
     }
     if (req.method === "POST" && /^\/api\/products\/[^/]+\/stock$/.test(url.pathname)) {
-      requireOwner(user, "Only the owner can adjust stock records.");
+      ownerOnly(user, "Only the owner can adjust stock records.");
       const parts = url.pathname.split("/");
       const productId = decodeURIComponent(parts[3]);
       const body = await readJson(req);
@@ -365,7 +367,7 @@ const server = http.createServer(async (req, res) => {
       });
       return sendJson(res, 200, { message: "Stock updated successfully." });
     }
-    if (routeKey === "POST /api/sales") {
+    if (route === "POST /api/sales") {
       const body = await readJson(req);
       return sendJson(res, 201, {
         message: "Sale completed successfully.",
@@ -378,7 +380,7 @@ const server = http.createServer(async (req, res) => {
         }),
       });
     }
-    if (routeKey === "POST /api/credits/pay") {
+    if (route === "POST /api/credits/pay") {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Debt payment processed successfully.",
@@ -388,20 +390,20 @@ const server = http.createServer(async (req, res) => {
         }),
       });
     }
-    if (routeKey === "GET /api/reports/daily") {
+    if (route === "GET /api/reports/daily") {
       return sendJson(res, 200, buildReport(workspaceKey, "daily", url.searchParams.get("date")));
     }
-    if (routeKey === "GET /api/reports/weekly") {
+    if (route === "GET /api/reports/weekly") {
       return sendJson(res, 200, buildReport(workspaceKey, "weekly", url.searchParams.get("date")));
     }
-    if (routeKey === "GET /api/reports/monthly") {
+    if (route === "GET /api/reports/monthly") {
       return sendJson(res, 200, buildReport(workspaceKey, "monthly", url.searchParams.get("date")));
     }
-    if (routeKey === "GET /api/reports/annual") {
+    if (route === "GET /api/reports/annual") {
       return sendJson(res, 200, buildReport(workspaceKey, "annual", url.searchParams.get("date")));
     }
 
-    if (req.method === "GET" && !url.pathname.startsWith("/api/")) {
+    if (req.method === "GET" && !isApiCall) {
       return serveStatic(url.pathname, res);
     }
 

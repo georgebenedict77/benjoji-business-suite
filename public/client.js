@@ -36,12 +36,14 @@ function installHelperText() {
     return "Install on Windows or Android from a supported browser for a cleaner app-style experience.";
   }
   if (isIosDevice()) {
+    // iPhone still needs the manual Safari flow.
     return "On iPhone, open this in Safari, tap Share, then choose Add to Home Screen.";
   }
   return "";
 }
 
 function getReceiptPrintDefault() {
+  // keep this local so every till can decide its own default
   return localStorage.getItem("benjoji_receipt_print_default") !== "false";
 }
 
@@ -77,8 +79,8 @@ function currentBusinessProfile() {
 }
 
 function businessPlaceholderLogo(name = "Business") {
-  const safeName = String(name || "Business").trim() || "Business";
-  const initials = safeName
+  const businessName = String(name || "Business").trim() || "Business";
+  const initials = businessName
     .split(/\s+/)
     .map((part) => part[0] || "")
     .join("")
@@ -5576,19 +5578,19 @@ function setSaleItemQuantity(index, nextQuantity) {
     throw new Error("Product not found.");
   }
 
-  const safeQuantity = Math.floor(Number(nextQuantity));
-  if (!Number.isFinite(safeQuantity) || safeQuantity < 0) {
+  const qty = Math.floor(Number(nextQuantity));
+  if (!Number.isFinite(qty) || qty < 0) {
     throw new Error("Quantity must be a whole number.");
   }
-  if (safeQuantity === 0) {
+  if (qty === 0) {
     state.saleDraft.items.splice(index, 1);
     return;
   }
-  if (safeQuantity > product.stockQuantity) {
+  if (qty > product.stockQuantity) {
     throw new Error(`Only ${product.stockQuantity} units are available for ${product.name}.`);
   }
 
-  item.quantity = safeQuantity;
+  item.quantity = qty;
   item.subtotal = item.quantity * item.unitPrice;
 }
 
@@ -5624,25 +5626,25 @@ function applySaleQuantityChange(index, nextQuantity) {
     throw new Error("Sale item not found.");
   }
 
-  const safeQuantity = Math.floor(Number(nextQuantity));
-  if (!Number.isFinite(safeQuantity) || safeQuantity <= 0) {
+  const qty = Math.floor(Number(nextQuantity));
+  if (!Number.isFinite(qty) || qty <= 0) {
     throw new Error("Quantity must be at least 1.");
   }
-  if (safeQuantity === item.quantity) {
+  if (qty === item.quantity) {
     return;
   }
 
-  if (safeQuantity < item.quantity) {
+  if (qty < item.quantity) {
     state.securityPrompt = {
       title: "Reduce or remove item quantity",
       nextAction: "set-sale-item-quantity-approved",
       index,
-      quantity: safeQuantity,
+      quantity: qty,
     };
     return;
   }
 
-  setSaleItemQuantity(index, safeQuantity);
+  setSaleItemQuantity(index, qty);
 }
 
 function getCartQuantity(productId) {
