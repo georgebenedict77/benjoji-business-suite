@@ -1,6 +1,6 @@
 {
   "name": "benjoji-business-suite",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": true,
   "description": "Business management platform for POS, inventory, debt tracking, reporting, backups, and workspace control.",
   "engines": {
