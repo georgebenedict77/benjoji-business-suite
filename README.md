@@ -64,6 +64,14 @@ Then open:
 http://127.0.0.1:3000
 ```
 
+## Public Site
+
+The GitHub Pages landing site for the suite is published at:
+
+```text
+https://georgebenedict77.github.io/benjoji-business-suite/
+```
+
 ## Verification
 
 Run the non-destructive smoke test against an isolated test database:
