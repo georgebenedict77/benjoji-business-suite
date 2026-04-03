@@ -1,0 +1,13 @@
+out/
+node_modules/
+.edge-headless/
+data/
+data-test/
+sandbox-data/
+sandbox-data-reports/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.bak
+*.log
+README.updated.md
