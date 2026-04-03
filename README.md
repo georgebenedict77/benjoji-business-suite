@@ -1,10 +1,10 @@
 # Benjoji Business Suite
 
-Benjoji Business Suite is a local-first business management platform for retailers, supermarkets, wholesalers, salons, service counters, and multi-branch businesses that need one workspace for checkout, inventory, debt tracking, reporting, account control, and backup recovery.
+Benjoji Business Suite is a local-first business management platform for retailers, supermarkets, wholesalers, salons, service counters, and multi-branch businesses. Each business gets its own independent workspace, database, owner account, branding, payment routing, backups, and staff accounts.
 
 ## What It Includes
 
-- Branded landing page, intro, login, and business workspace setup
+- Branded landing page, intro, login, and independent business workspace setup
 - Desktop-friendly POS flow with basket-first checkout and popup payment finalization
 - Split payments across cash, M-Pesa, Airtel Money, card, bank transfer, Buy Goods, Paybill, and gift card
 - Inventory management with product creation, stock-in, stock-out, low-stock visibility, and stock records
@@ -12,6 +12,7 @@ Benjoji Business Suite is a local-first business management platform for retaile
 - Daily, weekly, monthly, and annual reports with calendar drill-down
 - Owner control center for business branding, payment routing, receipt rules, security policy, compliance notes, backups, and restore
 - Local backup snapshots plus restore workflow for recovery
+- Workspace isolation so one client business never depends on another client business account
 
 ## Stack
 
@@ -22,16 +23,19 @@ Benjoji Business Suite is a local-first business management platform for retaile
 
 ## Local Data
 
-The suite uses this persistent local database by default on Windows:
+The suite uses a persistent local app-data directory on Windows. New installs prefer:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\BENJOJI Payment Handling\benjoji.sqlite
+C:\Users\<YourUser>\AppData\Local\Benjoji Business Suite\
 ```
 
-Backups are stored beside it in:
+If an older installation already exists under the previous folder name, the suite keeps using that legacy location automatically so existing data is not lost.
+
+Inside the active data directory, each business workspace has its own isolated database and backups:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\BENJOJI Payment Handling\backups
+workspaces\<workspace-id>\benjoji.sqlite
+workspaces\<workspace-id>\backups\
 ```
 
 ## Run
@@ -60,6 +64,12 @@ Run the non-destructive smoke test against an isolated test database:
 npm run smoke
 ```
 
+Run the HTTP workspace smoke test against a temporary isolated server:
+
+```powershell
+npm run smoke:http
+```
+
 Run the full local verification bundle:
 
 ```powershell
@@ -69,7 +79,7 @@ npm run verify
 ## Project Structure
 
 ```text
-lib/         backend business logic, auth, control, storage
+lib/         backend business logic, workspace auth, workspace control, storage
 public/      landing page, app shell, POS, reports, styling, assets
 scripts/     local verification scripts
 server.js    HTTP server and API routes

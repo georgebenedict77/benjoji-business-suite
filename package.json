@@ -8,6 +8,7 @@
     "check:server": "node --check server.js",
     "check:client": "node --check public/client.js",
     "smoke": "node scripts/smoke-test.js",
-    "verify": "npm run check:server && npm run check:client && npm run smoke"
+    "smoke:http": "node scripts/http-smoke-test.js",
+    "verify": "npm run check:server && npm run check:client && npm run smoke && npm run smoke:http"
   }
 }

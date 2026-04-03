@@ -1,7 +1,13 @@
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 
-$targetDataDir = Join-Path $env:LOCALAPPDATA "BENJOJI Payment Handling"
+$preferredDataDir = Join-Path $env:LOCALAPPDATA "Benjoji Business Suite"
+$legacyDataDir = Join-Path $env:LOCALAPPDATA "BENJOJI Payment Handling"
+$targetDataDir = if ((Test-Path (Join-Path $legacyDataDir "workspaces")) -or (Test-Path (Join-Path $legacyDataDir "benjoji.sqlite"))) {
+    $legacyDataDir
+} else {
+    $preferredDataDir
+}
 $env:BENJOJI_DATA_DIR = $targetDataDir
 
 $serverRunning = $false

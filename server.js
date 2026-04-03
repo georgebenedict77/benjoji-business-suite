@@ -47,8 +47,8 @@ const {
 const { readJson, sendError, sendJson, serveStatic } = require("./lib/http");
 const { normalizeRole, optionalText, requireText } = require("./lib/utils");
 
-const HOST = "127.0.0.1";
-const PORT = 3000;
+const HOST = process.env.HOST || "127.0.0.1";
+const PORT = Number(process.env.PORT || 3000);
 
 function requireOwner(user, message = "Only the owner can perform this action.") {
   if (!user || user.role !== "OWNER") {
@@ -407,6 +407,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`BENJOJI app running on http://${HOST}:${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`Benjoji Business Suite running on http://${HOST}:${PORT}`);
+  });
+}
+
+module.exports = server;
