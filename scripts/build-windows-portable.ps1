@@ -67,7 +67,6 @@ $releaseItems = @(
     "README.md",
     "LICENSE",
     "OPERATIONS_AND_COMPLIANCE.md",
-    "PROJECT_SPEC.md",
     "start-app.ps1",
     "start-app.bat",
     "start-lan.ps1",

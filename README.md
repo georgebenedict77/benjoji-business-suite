@@ -165,4 +165,3 @@ server.js    HTTP server and API routes
 
 - Payment provider approvals are currently simulated workflow approvals inside the suite. Live provider integrations still need real business credentials and provider APIs.
 - Receipt printing is browser-based today. Dedicated thermal/POS printer integration can be added later per client hardware.
-- The legacy Java console MVP remains in `src/` as an earlier foundation and is not the primary runtime for the current suite.
