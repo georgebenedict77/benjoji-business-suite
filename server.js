@@ -48,7 +48,7 @@ const {
 const { readJson, sendError, sendJson, serveStatic } = require("./lib/http");
 const { normalizeRole, optionalText, requireText } = require("./lib/utils");
 
-const HOST = process.env.HOST || (process.env.NODE_ENV === "production" || process.env.RENDER === "true" ? "0.0.0.0" : "127.0.0.1");
+const HOST = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 const PORT = Number(process.env.PORT || 3000);
 
 function requireOwner(user, message = "Only the owner can perform this action.") {

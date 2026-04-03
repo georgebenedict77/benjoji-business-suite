@@ -74,24 +74,10 @@ https://georgebenedict77.github.io/benjoji-business-suite/
 
 ## Full App Deployment
 
-The repository is now prepared for full hosted deployment too, not just the public landing site.
+The repository is prepared for real operation beyond the public landing site too.
 
-- Render blueprint: [render.yaml](./render.yaml)
 - Docker runtime: [Dockerfile](./Dockerfile)
 - deployment guide: [DEPLOYMENT.md](./DEPLOYMENT.md)
-
-For Render, the suite is set up to use:
-
-- a persistent disk for SQLite workspace data and backups
-- secure production cookies
-- a health check at `/api/health`
-- `0.0.0.0` host binding for hosted environments
-
-Render one-click deploy URL:
-
-```text
-https://render.com/deploy?repo=https://github.com/georgebenedict77/benjoji-business-suite
-```
 
 ## Installing The App
 

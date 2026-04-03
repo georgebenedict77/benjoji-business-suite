@@ -82,6 +82,21 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function removeDirectoryWithRetries(targetPath, attempts = 6) {
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (error?.code !== "EPERM" && error?.code !== "EBUSY") {
+        throw error;
+      }
+      await wait(250 * (index + 1));
+    }
+  }
+  fs.rmSync(targetPath, { recursive: true, force: true });
+}
+
 async function waitForHealth() {
   const start = Date.now();
   while (Date.now() - start < 15000) {
@@ -372,7 +387,7 @@ async function main() {
     console.log(`Base URL: ${BASE_URL}`);
   } finally {
     child.kill();
-    fs.rmSync(smokeDataDir, { recursive: true, force: true });
+    await removeDirectoryWithRetries(smokeDataDir);
   }
 }
 

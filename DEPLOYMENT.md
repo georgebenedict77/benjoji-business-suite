@@ -1,31 +1,45 @@
 # Deployment Guide
 
-Benjoji Business Suite can be deployed as a full hosted app for browser, Windows install, and phone access.
+Benjoji Business Suite is best approached in three layers:
 
-## Recommended: Render
+1. public product site
+2. Windows portable app
+3. optional private hosting later
 
-The repository includes [render.yaml](./render.yaml) so the suite can be deployed as a Node web service with a persistent disk for SQLite workspace data.
+## Public Product Site
 
-### What the Render setup does
+The public product site is already live on GitHub Pages and is ideal for:
 
-- runs the Node server as a web service
-- mounts a persistent disk at `/var/data/benjoji`
-- stores all workspace databases and backups on that disk
-- enables production-safe host binding and secure cookies
-- exposes the built-in health check at `/api/health`
+- marketing the suite
+- sharing the product publicly
+- directing people to downloads and setup guides
 
-### Deploy steps
+## Windows Portable App
 
-1. Create a Render account.
-2. Choose `New +` then `Blueprint`.
-3. Connect the GitHub repository: `georgebenedict77/benjoji-business-suite`
-4. Render will read `render.yaml` automatically.
-5. Deploy the service.
-6. After deployment, open the public service URL and create workspaces normally.
+The fastest practical rollout today is the Windows portable package published in GitHub Releases.
 
-### Why a persistent disk matters
+### What it gives you
 
-The suite uses SQLite and local backup snapshots. Without a persistent disk, business data would be lost on redeploy or instance replacement.
+- the full suite code
+- a bundled Node runtime
+- local data saved under the Windows app-data folder
+- no paid hosting required
+- a clean download path for clients
+
+### Best use cases
+
+- owner-operated businesses
+- in-shop desktop usage
+- demos for potential clients
+- local-first rollout before cloud hosting
+
+### Release assets
+
+Download from:
+
+```text
+https://github.com/georgebenedict77/benjoji-business-suite/releases
+```
 
 ## Docker
 
@@ -38,6 +52,8 @@ docker build -t benjoji-business-suite .
 docker run -p 3000:3000 -e BENJOJI_DATA_DIR=/app/data -v benjoji-data:/app/data benjoji-business-suite
 ```
 
+Docker is useful if you later decide to run the suite on a VPS, office server, or private cloud setup.
+
 ## Windows Local Install
 
 1. Run the suite locally with `npm start` or `.\start-app.ps1`
@@ -48,7 +64,7 @@ docker run -p 3000:3000 -e BENJOJI_DATA_DIR=/app/data -v benjoji-data:/app/data 
 
 ### Best option
 
-Deploy the full app to a secure public host first. Then:
+Run the suite from its local desktop setup or a private hosted setup first. Then:
 
 - Android: open the hosted URL in Chrome and use `Install App` or `Add to Home screen`
 - iPhone: open the hosted URL in Safari, tap `Share`, then `Add to Home Screen`
