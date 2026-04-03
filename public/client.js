@@ -13,6 +13,10 @@ function getReceiptPrintDefault() {
   return localStorage.getItem("benjoji_receipt_print_default") !== "false";
 }
 
+function getLastWorkspaceKey() {
+  return localStorage.getItem("benjoji_last_workspace") || "";
+}
+
 function currentLocalIsoDate() {
   const now = new Date();
   const offsetMs = now.getTimezoneOffset() * 60 * 1000;
@@ -40,17 +44,39 @@ function currentBusinessProfile() {
   return readState()?.bootstrap?.workspaceConfig?.businessProfile || {};
 }
 
+function selectedWorkspaceSummary() {
+  const selectedKey = readState()?.authWorkspaceKey || getLastWorkspaceKey();
+  if (!selectedKey) {
+    return null;
+  }
+  const workspaces = Array.isArray(readState()?.bootstrap?.workspaces) ? readState().bootstrap.workspaces : [];
+  return workspaces.find((workspace) => workspace.workspaceKey === selectedKey) || null;
+}
+
 function currentBusinessName() {
+  if (!readState()?.bootstrap?.user) {
+    return "";
+  }
   const business = currentBusinessProfile();
-  return business.businessName || readState()?.bootstrap?.businessName || "Business Workspace";
+  return business.businessName || readState()?.bootstrap?.activeWorkspace?.businessName || "";
 }
 
 function currentBusinessBranch() {
-  return currentBusinessProfile().branchName || "Main Branch";
+  if (!readState()?.bootstrap?.user) {
+    return "Main Branch";
+  }
+  return currentBusinessProfile().branchName || readState()?.bootstrap?.activeWorkspace?.branchName || "Main Branch";
 }
 
 function currentBusinessLogo() {
+  if (!readState()?.bootstrap?.user) {
+    return PRODUCT_LOGO;
+  }
   return currentBusinessProfile().logoDataUrl || PRODUCT_LOGO;
+}
+
+function currentWorkspaceKey() {
+  return readState()?.bootstrap?.user?.workspaceKey || readState()?.bootstrap?.activeWorkspace?.workspaceKey || getLastWorkspaceKey();
 }
 
 function currentUserRoleLabel() {
@@ -185,6 +211,7 @@ const state = {
   authTab: "password",
   authPopupOpen: false,
   authChallenge: null,
+  authWorkspaceKey: getLastWorkspaceKey(),
   authPin: "",
   scannerPaused: localStorage.getItem("benjoji_scanner_paused") !== "false",
   receiptPrintDefault: getReceiptPrintDefault(),
@@ -436,7 +463,7 @@ function render() {
       }
     }
 
-    const baseScreen = !state.bootstrap.hasUsers || !state.bootstrap.user
+    const baseScreen = !state.bootstrap.user
       ? renderAuthScreen()
       : renderAppShell();
 
@@ -478,10 +505,8 @@ function screenShell(content) {
 }
 
 function renderAuthScreen() {
-  const isSetup = !state.bootstrap.hasUsers;
-  const businessName = currentBusinessName();
-  const businessBranch = currentBusinessBranch();
-  const businessLogo = currentBusinessLogo();
+  const hasWorkspaces = Boolean(state.bootstrap.hasWorkspaces);
+  const selectedWorkspace = selectedWorkspaceSummary();
   const navLinks = [
     { label: "Overview", href: "#auth-hero" },
     { label: "Modules", href: "#auth-modules" },
@@ -551,12 +576,12 @@ function renderAuthScreen() {
             <div class="eyebrow auth-eyebrow">${escapeHtml(PRODUCT_LABEL)}</div>
             <strong>${escapeHtml(PRODUCT_NAME)}</strong>
           </div>
-        </div>
+      </div>
         <div class="auth-nav-links">
           ${navLinks.map((item) => `<a href="${item.href}">${escapeHtml(item.label)}</a>`).join("")}
         </div>
         <div class="auth-top-actions">
-          <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password" ${isSetup ? "disabled" : ""}>Login</button>
+          <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password">Login</button>
           <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">Sign Up</button>
         </div>
       </header>
@@ -564,22 +589,22 @@ function renderAuthScreen() {
       <section id="auth-hero" class="auth-hero-section app-card">
         <div class="auth-hero-grid">
           <div class="auth-hero-copy">
-            <div class="auth-platform-badge">${isSetup ? "Commercial workspace setup" : "Built for growing businesses"}</div>
+            <div class="auth-platform-badge">${hasWorkspaces ? "Workspace-ready for many businesses" : "Create the first business workspace"}</div>
             <h1>Give clients a business suite that feels premium from the very first page.</h1>
             <p>Benjoji Business Suite brings together checkout, stock control, staff access, and reporting in one refined platform built for businesses that want a serious operational system and a strong first impression.</p>
             <div class="auth-hero-actions">
-              <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">${isSetup ? "Create Workspace" : "Create Account"}</button>
-              <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password" ${isSetup ? "disabled" : ""}>Login</button>
+              <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">Create Workspace</button>
+              <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password">Login</button>
             </div>
             ${state.error ? `<div class="status-banner error auth-status">${escapeHtml(state.error)}</div>` : ""}
             ${
-              !isSetup
+              selectedWorkspace
                 ? `
               <div class="auth-workspace-callout">
-                <img class="auth-workspace-callout-logo" src="${escapeAttr(businessLogo)}" alt="${escapeAttr(businessName)} logo" />
+                <img class="auth-workspace-callout-logo" src="${escapeAttr(PRODUCT_LOGO)}" alt="${escapeAttr(PRODUCT_NAME)} logo" />
                 <div>
-                  <strong>${escapeHtml(businessName)}</strong>
-                  <span>${escapeHtml(businessBranch)} | Owner and staff sign in from this workspace.</span>
+                  <strong>Saved Workspace Ready</strong>
+                  <span>${escapeHtml(selectedWorkspace.businessName)} | ${escapeHtml(selectedWorkspace.workspaceKey)} | Use Login to continue into that business.</span>
                 </div>
               </div>
             `
@@ -601,7 +626,7 @@ function renderAuthScreen() {
             </div>
           </div>
           <div class="auth-hero-preview">
-            ${renderAuthHeroPreview({ isSetup, businessName, businessLogo })}
+            ${renderAuthHeroPreview({ hasWorkspaces, selectedWorkspace })}
           </div>
         </div>
       </section>
@@ -636,23 +661,23 @@ function renderAuthScreen() {
         <article class="auth-market-card app-card">
           <div>
             <div class="eyebrow">Built To Sell</div>
-            <h2>${isSetup ? "Create the first workspace for a new business" : "Reusable across many client businesses"}</h2>
+            <h2>${hasWorkspaces ? "Reusable across many client businesses" : "Create the first workspace for a new business"}</h2>
           </div>
           <div class="auth-market-list">
             ${industries.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
           </div>
           <div class="auth-trust-strip">
-            ${isSetup
+            ${!hasWorkspaces
               ? "Start with the business name, create the owner account, and the system is ready for staff onboarding."
-              : "Clients see a clean product landing page first, then enter their own branded business workspace after login."}
+              : "Clients see a clean product landing page first, then log in or create their own independent business workspace."}
           </div>
         </article>
         <article class="auth-journey-card app-card">
           <div class="eyebrow">Client Journey</div>
           <div class="auth-journey-steps">
             <div><strong>1. Discover</strong><span>They land on a premium page that explains the value clearly.</span></div>
-            <div><strong>2. Access</strong><span>They use the top-right Login or Sign Up buttons to continue through a clean popup.</span></div>
-            <div><strong>3. Operate</strong><span>They enter a business workspace built for sales, inventory, staff control, and reports.</span></div>
+            <div><strong>2. Access</strong><span>They use Login for an existing workspace or Sign Up to create a new business workspace.</span></div>
+            <div><strong>3. Operate</strong><span>They enter a branded workspace built for sales, inventory, staff control, and reports.</span></div>
           </div>
         </article>
       </section>
@@ -661,33 +686,33 @@ function renderAuthScreen() {
         <div>
           <div class="eyebrow">Ready To Start</div>
           <h2 class="section-title">Make the first impression feel like software a client can trust and buy.</h2>
-          <div class="section-subtitle">Keep the entry simple, attractive, and professional while still giving direct access to Login and Sign Up.</div>
+          <div class="section-subtitle">Keep the entry simple, attractive, and professional while giving every business an independent workspace of its own.</div>
         </div>
         <div class="auth-bottom-actions">
-          <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">${isSetup ? "Create First Workspace" : "Sign Up"}</button>
-          <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password" ${isSetup ? "disabled" : ""}>Login</button>
+          <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">Create Workspace</button>
+          <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password">Login</button>
         </div>
       </section>
-      ${renderAuthPopup(isSetup)}
+      ${renderAuthPopup()}
     </div>
   `);
 }
 
-function renderAuthHeroPreview({ isSetup, businessName, businessLogo }) {
+function renderAuthHeroPreview({ hasWorkspaces, selectedWorkspace }) {
   return `
     <div class="auth-interface-shell">
       ${
-        !isSetup
+        selectedWorkspace
           ? `
         <div class="auth-interface-mini auth-interface-workspace">
           <div class="auth-interface-brand">
-            <img src="${escapeAttr(businessLogo)}" alt="${escapeAttr(businessName)} logo" />
+            <img src="${escapeAttr(PRODUCT_LOGO)}" alt="${escapeAttr(PRODUCT_NAME)} logo" />
             <div>
-              <span>Current Workspace</span>
-              <strong>${escapeHtml(businessName)}</strong>
+              <span>Saved Workspace</span>
+              <strong>${escapeHtml(selectedWorkspace.businessName)}</strong>
             </div>
           </div>
-          <strong>Ready for owner and staff access</strong>
+          <strong>Workspace ID: ${escapeHtml(selectedWorkspace.workspaceKey)}</strong>
         </div>
       `
           : ""
@@ -728,7 +753,7 @@ function renderAuthHeroPreview({ isSetup, businessName, businessLogo }) {
       </div>
       <div class="auth-interface-mini">
         <span>Payments</span>
-        <strong>Cash | Card | M-Pesa | Airtel</strong>
+        <strong>${hasWorkspaces ? "Independent workspaces | Independent branding" : "Cash | Card | M-Pesa | Airtel"}</strong>
       </div>
     </div>
   `;
@@ -760,25 +785,21 @@ function renderAuthModuleCard({ title, copy, kicker, iconName }) {
   `;
 }
 
-function renderAuthPopup(isSetup) {
+function renderAuthPopup() {
   if (!state.authPopupOpen) {
     return "";
   }
 
-  const businessName = currentBusinessName();
-  const businessLogo = currentBusinessLogo();
+  const selectedWorkspace = selectedWorkspaceSummary();
+  const workspaceKey = selectedWorkspace?.workspaceKey || state.authWorkspaceKey || currentWorkspaceKey();
   const title = state.authChallenge
     ? "Two-step verification"
-    : isSetup
-      ? "Sign Up"
-      : state.authTab === "create-account" ? `Sign Up to ${businessName}` : `Login to ${businessName}`;
-  const subtitle = isSetup
-    ? "Create the first owner account and set the business name."
-    : state.authChallenge
-      ? "Complete the second step to finish signing in."
+    : state.authTab === "create-account" ? "Create a new business workspace" : "Login to a workspace";
+  const subtitle = state.authChallenge
+    ? "Complete the second step to finish signing in."
     : state.authTab === "create-account"
-      ? "Create a team account with owner approval."
-      : "Enter your username and password to access the workspace.";
+      ? "Create an independent workspace for a new company and customize it from day one."
+      : "Enter the workspace ID, username, and password to access an existing business workspace.";
 
   return `
     <div class="modal-layer open auth-popup-layer">
@@ -793,20 +814,20 @@ function renderAuthPopup(isSetup) {
           <button class="ghost-button icon-button" type="button" data-action="close-auth-popup">${icon("close")}</button>
         </div>
         ${
-          !isSetup
+          !state.authChallenge && selectedWorkspace && state.authTab === "password"
             ? `
           <div class="auth-workspace-banner">
-            <img class="auth-workspace-banner-logo" src="${escapeAttr(businessLogo)}" alt="${escapeAttr(businessName)} logo" />
+            <img class="auth-workspace-banner-logo" src="${escapeAttr(PRODUCT_LOGO)}" alt="${escapeAttr(PRODUCT_NAME)} logo" />
             <div>
-              <strong>${escapeHtml(businessName)}</strong>
-              <span>${escapeHtml(currentBusinessBranch())} | ${escapeHtml(currentPanelLabel())}</span>
+              <strong>${escapeHtml(selectedWorkspace.businessName)}</strong>
+              <span>${escapeHtml(selectedWorkspace.branchName || "Main Branch")} | Workspace ID: ${escapeHtml(workspaceKey || "Not selected")}</span>
             </div>
           </div>
         `
             : ""
         }
         ${
-          !isSetup && !state.authChallenge
+          !state.authChallenge
             ? `
           <div class="tabs-inline auth-popup-tabs">
             <button type="button" class="${state.authTab === "password" ? "active" : ""}" data-action="switch-auth-tab" data-tab="password">Login</button>
@@ -816,7 +837,32 @@ function renderAuthPopup(isSetup) {
             : ""
         }
         ${state.error ? `<div class="status-banner error auth-status auth-popup-status">${escapeHtml(state.error)}</div>` : ""}
-        ${state.authChallenge ? renderSecondFactorForm() : isSetup ? renderSetupForm() : renderLoginForm()}
+        ${state.authChallenge ? renderSecondFactorForm() : state.authTab === "create-account" ? renderSetupForm() : renderLoginForm()}
+      </div>
+    </div>
+  `;
+}
+
+function renderBusinessWorkspaceOptions() {
+  const workspaces = Array.isArray(state.bootstrap?.workspaces) ? state.bootstrap.workspaces : [];
+  if (!workspaces.length) {
+    return "";
+  }
+
+  return `
+    <div class="auth-workspace-list">
+      <div class="eyebrow">Available Local Workspaces</div>
+      <div class="auth-workspace-tags">
+        ${workspaces.map((workspace) => `
+          <button
+            type="button"
+            class="ghost-button compact-button"
+            data-action="use-workspace-key"
+            data-workspace-key="${escapeAttr(workspace.workspaceKey)}"
+          >
+            ${escapeHtml(workspace.businessName)} | ${escapeHtml(workspace.workspaceKey)}
+          </button>
+        `).join("")}
       </div>
     </div>
   `;
@@ -856,14 +902,18 @@ function renderBusinessLogoEditor({ hiddenName, value = "", label = "Business Lo
 function renderSetupForm() {
   return `
     <div class="auth-copy-block">
-      <h2>Create owner account</h2>
-      <p class="section-subtitle">Set up the first business workspace, define how money is received, and establish the security and recovery rules from day one.</p>
+      <h2>Create a business workspace</h2>
+      <p class="section-subtitle">Set up a new company, create the owner account, define how money is received, and establish the security and recovery rules from day one.</p>
     </div>
     <form id="setup-form" class="form-grid auth-form-grid">
-      <div class="full-span auth-stage-title">Stage 1. Business Identity</div>
+      <div class="full-span auth-stage-title">Stage 1. Workspace Identity</div>
       <div class="field full-span">
         <label>Business Name</label>
         <input name="businessName" required placeholder="Your Business Name" />
+      </div>
+      <div class="field">
+        <label>Workspace ID</label>
+        <input name="workspaceKey" placeholder="my-business-suite" />
       </div>
       <div class="field">
         <label>Legal Business Name</label>
@@ -952,9 +1002,6 @@ function renderSetupForm() {
       <div class="field">
         <label><input type="checkbox" name="autoBackupEnabled" value="true" checked /> Enable automatic backup snapshots</label>
       </div>
-      <div class="field">
-        <label><input type="checkbox" name="requireOwnerApprovalForNewAccounts" value="true" checked /> Require owner approval for new accounts</label>
-      </div>
 
       <div class="full-span auth-stage-title">Stage 4. Payment Routing & Receipt</div>
       <div class="full-span auth-checkbox-grid">
@@ -1003,7 +1050,7 @@ function renderSetupForm() {
         <label><input type="checkbox" name="accepted" value="true" required /> I confirm that the business owner accepts the platform terms, privacy handling rules, and backup responsibilities.</label>
       </div>
       <div class="full-span">
-        <button class="primary-button auth-submit" type="submit">Sign Up</button>
+        <button class="primary-button auth-submit" type="submit">Create Workspace</button>
       </div>
     </form>
   `;
@@ -1011,93 +1058,35 @@ function renderSetupForm() {
 
 function renderLoginForm() {
   const secondFactorMode = state.bootstrap?.workspaceConfig?.securityPolicy?.secondFactorMode || "NONE";
-  const showingCreateAccount = state.authTab === "create-account";
+  const preferredWorkspace = state.authWorkspaceKey || currentWorkspaceKey();
   return `
-    ${
-      !showingCreateAccount
-        ? `
-      <div class="auth-copy-block">
-        <h2>Login</h2>
-        <p class="section-subtitle">Enter your username and password to access the workspace.${secondFactorMode !== "NONE" ? " A second security step may appear after password verification." : ""}</p>
+    <div class="auth-copy-block">
+      <h2>Login</h2>
+      <p class="section-subtitle">Enter the workspace ID, username, and password to access the workspace.${secondFactorMode !== "NONE" && currentWorkspaceKey() ? " A second security step may appear after password verification." : ""}</p>
+    </div>
+    <form id="login-form" class="form-grid single auth-form-grid">
+      <input type="hidden" name="authMode" value="password" />
+      <div class="field">
+        <label>Workspace ID</label>
+        <input name="workspaceKey" required placeholder="workspace-id" value="${escapeAttr(preferredWorkspace)}" />
       </div>
-      <form id="login-form" class="form-grid single auth-form-grid">
-        <input type="hidden" name="authMode" value="password" />
-        <div class="field">
-          <label>Username</label>
-          <input name="username" required placeholder="Username" />
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input name="password" type="password" required placeholder="Password" />
-        </div>
-        <div>
-          <button class="primary-button auth-submit" type="submit">Login</button>
-        </div>
-        <div class="auth-form-switch">
-          Need an account?
-          <button type="button" class="inline-link-button" data-action="switch-auth-tab" data-tab="create-account">Sign Up</button>
-        </div>
-      </form>
-    `
-        : `
-      <div class="auth-copy-block">
-        <h2>Sign Up</h2>
-        <p class="section-subtitle">A current owner must approve each new team account, and security settings follow the business policy.</p>
+      <div class="field">
+        <label>Username</label>
+        <input name="username" required placeholder="Username" />
       </div>
-      <form id="register-form" class="form-grid auth-form-grid">
-        <div class="field">
-          <label>Full Name</label>
-          <input name="fullName" required placeholder="Full name" />
-        </div>
-        <div class="field">
-          <label>Username</label>
-          <input name="username" required placeholder="Username" />
-        </div>
-        <div class="field">
-          <label>Email</label>
-          <input name="email" type="email" placeholder="Optional email" />
-        </div>
-        <div class="field">
-          <label>Role</label>
-          <select name="role">
-            <option value="STAFF">Staff</option>
-            <option value="OWNER">Owner</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input name="password" type="password" required placeholder="At least 8 characters" />
-        </div>
-        <div class="field">
-          <label>Confirm Password</label>
-          <input name="confirmPassword" type="password" required placeholder="Repeat password" />
-        </div>
-        <div class="field">
-          <label>Security PIN</label>
-          <input name="pin" type="password" inputmode="numeric" maxlength="6" placeholder="6-digit PIN if two-step is required" />
-        </div>
-        <div class="field">
-          <label>Confirm Security PIN</label>
-          <input name="confirmPin" type="password" inputmode="numeric" maxlength="6" placeholder="Repeat 6-digit PIN" />
-        </div>
-        <div class="field">
-          <label>Owner Username</label>
-          <input name="ownerUsername" required placeholder="Authorizing owner username" />
-        </div>
-        <div class="field">
-          <label>Owner Password</label>
-          <input name="ownerPassword" type="password" required placeholder="Owner password" />
-        </div>
-        <div class="full-span">
-          <button class="primary-button auth-submit" type="submit">Sign Up</button>
-        </div>
-        <div class="full-span auth-form-switch">
-          Already have access?
-          <button type="button" class="inline-link-button" data-action="switch-auth-tab" data-tab="password">Login</button>
-        </div>
-      </form>
-    `
-    }
+      <div class="field">
+        <label>Password</label>
+        <input name="password" type="password" required placeholder="Password" />
+      </div>
+      <div>
+        <button class="primary-button auth-submit" type="submit">Login</button>
+      </div>
+      ${renderBusinessWorkspaceOptions()}
+      <div class="auth-form-switch">
+        Need a workspace?
+        <button type="button" class="inline-link-button" data-action="switch-auth-tab" data-tab="create-account">Create Workspace</button>
+      </div>
+    </form>
   `;
 }
 
@@ -1105,9 +1094,13 @@ function renderSecondFactorForm() {
   return `
     <div class="auth-copy-block">
       <h2>Security verification</h2>
-      <p class="section-subtitle">A password check has passed. Enter the 6-digit account PIN to complete sign-in.</p>
+      <p class="section-subtitle">A password check has passed. Enter the 6-digit account PIN to complete sign-in for workspace ${escapeHtml(state.authChallenge?.workspaceKey || currentWorkspaceKey() || "-")}.</p>
     </div>
     <form id="second-factor-form" class="form-grid single auth-form-grid">
+      <div class="field">
+        <label>Workspace ID</label>
+        <input value="${escapeAttr(state.authChallenge?.workspaceKey || currentWorkspaceKey() || "")}" disabled />
+      </div>
       <div class="field">
         <label>Username</label>
         <input value="${escapeAttr(state.authChallenge?.username || "")}" disabled />
@@ -1909,7 +1902,7 @@ function renderControlCenterView() {
             <div class="field"><label>Lock Duration (Minutes)</label><input name="lockMinutes" type="number" min="5" value="${escapeAttr(security.lockMinutes || 15)}" /></div>
             <div class="field"><label>Backup Retention</label><input name="backupRetention" type="number" min="5" value="${escapeAttr(security.backupRetention || 20)}" /></div>
             <div class="field"><label><input type="checkbox" name="autoBackupEnabled" value="true" ${security.autoBackupEnabled ? "checked" : ""} /> Enable automatic backup snapshots</label></div>
-            <div class="field"><label><input type="checkbox" name="requireOwnerApprovalForNewAccounts" value="true" ${security.requireOwnerApprovalForNewAccounts ? "checked" : ""} /> Require owner approval for new accounts</label></div>
+            <div class="field full-span"><label>Account Provisioning</label><input value="Workspace owners create staff accounts from User Management." disabled /></div>
             <div class="field"><label>Incident Contact Name</label><input name="incidentContactName" value="${escapeAttr(security.incidentContactName || "")}" /></div>
             <div class="field"><label>Incident Contact Phone</label><input name="incidentContactPhone" value="${escapeAttr(security.incidentContactPhone || "")}" /></div>
             <div class="field"><label>Incident Contact Email</label><input name="incidentContactEmail" type="email" value="${escapeAttr(security.incidentContactEmail || "")}" /></div>
@@ -3840,7 +3833,7 @@ function renderAccessView() {
             </div>
           </div>
           <div class="list-card">
-            <div class="list-item">The first registered account becomes the owner.</div>
+            <div class="list-item">Each business workspace has its own owner account and its own isolated data.</div>
             <div class="list-item">Only logged-in users can access the business workspace.</div>
             <div class="list-item">Only the owner can create extra users from inside the app.</div>
             <div class="list-item">Current second-step policy: ${escapeHtml(readableSecondFactorMode(secondFactorMode))}.</div>
@@ -4149,9 +4142,7 @@ document.addEventListener("click", async (event) => {
       state.authPopupOpen = true;
       state.authChallenge = null;
       state.error = "";
-      if (state.authTab !== "pin") {
-        state.authPin = "";
-      }
+      state.authPin = "";
       return render();
     }
     if (action === "open-auth-popup") {
@@ -4160,6 +4151,14 @@ document.addEventListener("click", async (event) => {
       state.authChallenge = null;
       state.error = "";
       state.authPin = "";
+      return render();
+    }
+    if (action === "use-workspace-key") {
+      state.authWorkspaceKey = target.dataset.workspaceKey || "";
+      state.authTab = "password";
+      state.authPopupOpen = true;
+      state.authChallenge = null;
+      state.error = "";
       return render();
     }
     if (action === "close-auth-popup") {
@@ -4565,6 +4564,11 @@ document.addEventListener("input", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) return;
 
+  if (target.form?.id === "login-form" && target.name === "workspaceKey") {
+    state.authWorkspaceKey = target.value.trim();
+    return;
+  }
+
   if (target.form?.id === "sale-search-form" && target.name === "search") {
     const caret = target.selectionStart ?? target.value.length;
     state.saleDraft.search = target.value;
@@ -4635,7 +4639,11 @@ document.addEventListener("submit", async (event) => {
   try {
     if (form.id === "setup-form") {
       const data = buildWorkspaceSetupPayload(form);
-      await api("/api/auth/register", { method: "POST", body: data });
+      const result = await api("/api/auth/register", { method: "POST", body: data });
+      state.authWorkspaceKey = result.workspace?.workspaceKey || data.workspaceKey || "";
+      if (state.authWorkspaceKey) {
+        localStorage.setItem("benjoji_last_workspace", state.authWorkspaceKey);
+      }
       resetStateAfterLogin();
       await loadBootstrap();
       await loadAppData();
@@ -4649,9 +4657,18 @@ document.addEventListener("submit", async (event) => {
         state.authChallenge = {
           challengeId: result.challengeId,
           username: data.username,
+          workspaceKey: data.workspaceKey,
         };
+        state.authWorkspaceKey = data.workspaceKey || "";
+        if (state.authWorkspaceKey) {
+          localStorage.setItem("benjoji_last_workspace", state.authWorkspaceKey);
+        }
         state.error = "";
         return render();
+      }
+      state.authWorkspaceKey = data.workspaceKey || "";
+      if (state.authWorkspaceKey) {
+        localStorage.setItem("benjoji_last_workspace", state.authWorkspaceKey);
       }
       resetStateAfterLogin();
       await loadBootstrap();
@@ -4665,22 +4682,16 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: {
           challengeId: state.authChallenge?.challengeId,
+          workspaceKey: state.authChallenge?.workspaceKey,
           pin: data.pin,
         },
       });
+      if (state.authChallenge?.workspaceKey) {
+        localStorage.setItem("benjoji_last_workspace", state.authChallenge.workspaceKey);
+      }
       resetStateAfterLogin();
       await loadBootstrap();
       await loadAppData();
-      return render();
-    }
-
-    if (form.id === "register-form") {
-      const data = formDataObject(form);
-      await api("/api/auth/register", { method: "POST", body: { ...data, businessName: state.bootstrap.businessName } });
-      state.authTab = "password";
-      state.authPin = "";
-      state.authPopupOpen = true;
-      alert("Account created successfully. The new user can now log in.");
       return render();
     }
 
@@ -4833,7 +4844,7 @@ document.addEventListener("submit", async (event) => {
 
     if (form.id === "access-form") {
       const data = formDataObject(form);
-      await api("/api/auth/register", { method: "POST", body: { ...data, businessName: state.bootstrap.businessName } });
+      await api("/api/auth/register-user", { method: "POST", body: data });
       form.reset();
       await refreshData();
       state.activeView = "access";
@@ -4898,7 +4909,7 @@ document.addEventListener("submit", async (event) => {
       return focusSaleSearchInputSoon();
     }
   } catch (error) {
-    if (["setup-form", "login-form", "register-form", "second-factor-form"].includes(form.id)) {
+    if (["setup-form", "login-form", "second-factor-form"].includes(form.id)) {
       state.error = error.message;
       return render();
     }
@@ -5322,6 +5333,7 @@ function resetStateAfterLogin() {
   state.authTab = "password";
   state.authChallenge = null;
   state.authPopupOpen = false;
+  state.authWorkspaceKey = currentWorkspaceKey() || getLastWorkspaceKey();
   state.settingsSection = "overview";
   state.settingsQuery = "";
   state.settingsOpen = false;
@@ -5360,6 +5372,7 @@ function resetStateAfterLogout() {
   state.authTab = "password";
   state.authChallenge = null;
   state.authPopupOpen = false;
+  state.authWorkspaceKey = getLastWorkspaceKey();
   state.securityPrompt = null;
 }
 
@@ -5593,7 +5606,6 @@ function buildWorkspaceSetupPayload(form) {
   return {
     ...data,
     autoBackupEnabled: Boolean(data.autoBackupEnabled),
-    requireOwnerApprovalForNewAccounts: Boolean(data.requireOwnerApprovalForNewAccounts),
     showContact: true,
     showTaxId: true,
     printLogoNote: true,
@@ -5640,7 +5652,6 @@ function buildSecurityPolicyPayload(form) {
   return {
     ...data,
     autoBackupEnabled: checkboxValue(form, "autoBackupEnabled"),
-    requireOwnerApprovalForNewAccounts: checkboxValue(form, "requireOwnerApprovalForNewAccounts"),
   };
 }
 

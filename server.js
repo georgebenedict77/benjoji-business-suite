@@ -1,6 +1,6 @@
 const http = require("node:http");
 const { URL } = require("node:url");
-const { getBusinessName, setSetting } = require("./lib/db");
+const { createWorkspace, getBusinessName, getWorkspaceSummary, listWorkspaceSummaries } = require("./lib/workspace-db");
 const {
   beginLogin,
   completeSecondFactorLogin,
@@ -8,9 +8,11 @@ const {
   destroySession,
   getCurrentUser,
   getUserCount,
+  getWorkspaceKey,
   loginUser,
+  resolveWorkspaceKey,
   verifyUserAccess,
-} = require("./lib/auth");
+} = require("./lib/workspace-auth");
 const {
   addOrStockInProduct,
   adjustProductStock,
@@ -27,7 +29,7 @@ const {
   listStockRecords,
   listUsers,
   updateProductDetails,
-} = require("./lib/business");
+} = require("./lib/workspace-business");
 const {
   configureInitialWorkspace,
   createBackupSnapshot,
@@ -41,7 +43,7 @@ const {
   updatePaymentProfile,
   updateReceiptProfile,
   updateSecurityPolicy,
-} = require("./lib/control");
+} = require("./lib/workspace-control");
 const { readJson, sendError, sendJson, serveStatic } = require("./lib/http");
 const { normalizeRole, optionalText, requireText } = require("./lib/utils");
 
@@ -62,11 +64,18 @@ const server = http.createServer(async (req, res) => {
     const routeKey = `${req.method} ${url.pathname}`;
 
     if (routeKey === "GET /api/bootstrap") {
+      const user = getCurrentUser(req);
+      const workspaceKey = user?.workspaceKey || getWorkspaceKey(req);
+      const workspaces = listWorkspaceSummaries();
+      const activeWorkspace = workspaceKey ? getWorkspaceSummary(workspaceKey) : null;
       return sendJson(res, 200, {
-        hasUsers: getUserCount() > 0,
-        businessName: getBusinessName(),
-        workspaceConfig: getPublicWorkspaceConfig(),
-        user: getCurrentUser(req),
+        hasUsers: workspaces.some((workspace) => workspace.hasUsers),
+        hasWorkspaces: workspaces.length > 0,
+        workspaces,
+        activeWorkspace,
+        businessName: activeWorkspace ? getBusinessName(activeWorkspace.workspaceKey) : "",
+        workspaceConfig: activeWorkspace ? getPublicWorkspaceConfig(activeWorkspace.workspaceKey) : null,
+        user,
       });
     }
 
@@ -80,27 +89,6 @@ const server = http.createServer(async (req, res) => {
 
     if (routeKey === "POST /api/auth/register") {
       const body = await readJson(req);
-      const hasUsers = getUserCount() > 0;
-      const currentUser = getCurrentUser(req);
-      let ownerAuthorization = null;
-
-      if (hasUsers && !currentUser && body.ownerUsername) {
-        try {
-          ownerAuthorization = verifyUserAccess({
-            username: body.ownerUsername,
-            authMode: body.ownerAuthMode,
-            password: body.ownerPassword,
-            pin: body.ownerPin,
-            requiredRole: "OWNER",
-          });
-        } catch (error) {
-          return sendError(res, 403, error.message || "Owner authorization failed.");
-        }
-      }
-
-      if (hasUsers && !((currentUser && currentUser.role === "OWNER") || ownerAuthorization)) {
-        return sendError(res, 403, "Only the owner can create additional accounts.");
-      }
       if (body.password !== body.confirmPassword) {
         return sendError(res, 400, "Passwords do not match.");
       }
@@ -108,14 +96,18 @@ const server = http.createServer(async (req, res) => {
         return sendError(res, 400, "PIN entries do not match.");
       }
 
-      const role = hasUsers ? normalizeRole(body.role) : "OWNER";
+      const role = "OWNER";
       const requiresPin =
-        (!hasUsers && ["OWNER_ONLY", "ALL_USERS"].includes(String(body.secondFactorMode || "").toUpperCase()))
-        || requiresSecondFactorForRole(role);
+        ["OWNER_ONLY", "ALL_USERS"].includes(String(body.secondFactorMode || "").toUpperCase());
       if (requiresPin && !body.pin) {
-        return sendError(res, 400, "This security policy requires a 6-digit PIN for the selected account.");
+        return sendError(res, 400, "This security policy requires a 6-digit PIN for the owner account.");
       }
-      const createdUser = createUser({
+
+      const workspace = createWorkspace({
+        businessName: requireText(body.businessName, "Business name"),
+        workspaceKey: optionalText(body.workspaceKey),
+      });
+      const createdUser = createUser(workspace.workspaceKey, {
         fullName: body.fullName,
         username: body.username,
         email: body.email,
@@ -123,15 +115,51 @@ const server = http.createServer(async (req, res) => {
         pin: body.pin,
         role,
       });
-
-      if (!hasUsers) {
-        setSetting("business_name", requireText(body.businessName, "Business name"));
-        configureInitialWorkspace(body, body.fullName || body.username || "Owner");
-        loginUser(res, { username: body.username, password: body.password, authMode: "password" });
-      }
+      configureInitialWorkspace(workspace.workspaceKey, body, body.fullName || body.username || "Owner");
+      const loggedInUser = loginUser(res, {
+        workspaceKey: workspace.workspaceKey,
+        username: body.username,
+        password: body.password,
+        authMode: "password",
+      });
 
       return sendJson(res, 201, {
-        message: hasUsers ? "Account created successfully." : "Owner account created successfully.",
+        message: "Workspace created successfully.",
+        workspace,
+        user: loggedInUser || createdUser,
+      });
+    }
+
+    if (routeKey === "POST /api/auth/register-user") {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return sendError(res, 401, "Please log in to continue.");
+      }
+      requireOwner(currentUser, "Only the owner can create additional accounts.");
+      const body = await readJson(req);
+      if (body.password !== body.confirmPassword) {
+        return sendError(res, 400, "Passwords do not match.");
+      }
+      if ((body.pin || body.confirmPin) && body.pin !== body.confirmPin) {
+        return sendError(res, 400, "PIN entries do not match.");
+      }
+
+      const role = normalizeRole(body.role);
+      const requiresPin = requiresSecondFactorForRole(currentUser.workspaceKey, role);
+      if (requiresPin && !body.pin) {
+        return sendError(res, 400, "This security policy requires a 6-digit PIN for the selected account.");
+      }
+
+      const createdUser = createUser(currentUser.workspaceKey, {
+        fullName: body.fullName,
+        username: body.username,
+        email: body.email,
+        password: body.password,
+        pin: body.pin,
+        role,
+      });
+      return sendJson(res, 201, {
+        message: "Account created successfully.",
         user: createdUser,
       });
     }
@@ -142,14 +170,14 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         message: result.requiresSecondFactor ? "Second authentication step required." : "Login successful.",
         ...result,
-        businessName: getBusinessName(),
+        businessName: getBusinessName(result.workspaceKey),
       });
     }
 
     if (routeKey === "POST /api/auth/login/verify-second-factor") {
       const body = await readJson(req);
       const user = completeSecondFactorLogin(res, body);
-      return sendJson(res, 200, { message: "Login successful.", user, businessName: getBusinessName() });
+      return sendJson(res, 200, { message: "Login successful.", user, businessName: getBusinessName(user.workspaceKey) });
     }
 
     if (routeKey === "POST /api/auth/verify") {
@@ -160,6 +188,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       try {
         verifyUserAccess({
+          workspaceKey: currentUser.workspaceKey,
           username: currentUser.username,
           authMode: body.authMode,
           password: body.password,
@@ -181,44 +210,46 @@ const server = http.createServer(async (req, res) => {
       return sendError(res, 401, "Please log in to continue.");
     }
 
+    const workspaceKey = user?.workspaceKey;
+
     if (routeKey === "GET /api/dashboard") {
-      return sendJson(res, 200, getDashboardSummary());
+      return sendJson(res, 200, getDashboardSummary(workspaceKey));
     }
     if (routeKey === "GET /api/products") {
-      return sendJson(res, 200, { products: listProducts() });
+      return sendJson(res, 200, { products: listProducts(workspaceKey) });
     }
     if (routeKey === "GET /api/stock") {
-      return sendJson(res, 200, { stockRecords: listStockRecords() });
+      return sendJson(res, 200, { stockRecords: listStockRecords(workspaceKey) });
     }
     if (routeKey === "GET /api/sales") {
-      return sendJson(res, 200, { sales: listSales() });
+      return sendJson(res, 200, { sales: listSales(workspaceKey) });
     }
     if (routeKey === "GET /api/credits") {
-      return sendJson(res, 200, { credits: listCredits(), openCredits: listOpenCredits() });
+      return sendJson(res, 200, { credits: listCredits(workspaceKey), openCredits: listOpenCredits(workspaceKey) });
     }
     if (routeKey === "GET /api/accounting") {
-      return sendJson(res, 200, buildAccountingSummary());
+      return sendJson(res, 200, buildAccountingSummary(workspaceKey));
     }
     if (routeKey === "GET /api/payments") {
-      return sendJson(res, 200, { paymentLedger: listPaymentLedger() });
+      return sendJson(res, 200, { paymentLedger: listPaymentLedger(workspaceKey) });
     }
     if (routeKey === "GET /api/users") {
       if (user.role !== "OWNER") {
         return sendError(res, 403, "Only the owner can access this area.");
       }
-      return sendJson(res, 200, { users: listUsers() });
+      return sendJson(res, 200, { users: listUsers(workspaceKey) });
     }
     if (routeKey === "GET /api/admin/control-center") {
       requireOwner(user, "Only the owner can access the control center.");
-      return sendJson(res, 200, getOwnerControlCenter());
+      return sendJson(res, 200, getOwnerControlCenter(workspaceKey));
     }
     if (routeKey === "PUT /api/admin/business-profile") {
       requireOwner(user, "Only the owner can update business profile settings.");
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Business profile updated successfully.",
-        businessProfile: updateBusinessProfile(body, user.fullName),
-        workspaceConfig: getPublicWorkspaceConfig(),
+        businessProfile: updateBusinessProfile(workspaceKey, body, user.fullName),
+        workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
     if (routeKey === "PUT /api/admin/receipt-profile") {
@@ -226,8 +257,8 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Receipt profile updated successfully.",
-        receiptProfile: updateReceiptProfile(body, user.fullName),
-        workspaceConfig: getPublicWorkspaceConfig(),
+        receiptProfile: updateReceiptProfile(workspaceKey, body, user.fullName),
+        workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
     if (routeKey === "PUT /api/admin/payment-profile") {
@@ -235,8 +266,8 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Payment routing updated successfully.",
-        paymentProfile: updatePaymentProfile(body, user.fullName),
-        workspaceConfig: getPublicWorkspaceConfig(),
+        paymentProfile: updatePaymentProfile(workspaceKey, body, user.fullName),
+        workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
     if (routeKey === "PUT /api/admin/security-policy") {
@@ -244,8 +275,8 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Security policy updated successfully.",
-        securityPolicy: updateSecurityPolicy(body, user.fullName),
-        workspaceConfig: getPublicWorkspaceConfig(),
+        securityPolicy: updateSecurityPolicy(workspaceKey, body, user.fullName),
+        workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
     if (routeKey === "PUT /api/admin/compliance-profile") {
@@ -253,8 +284,8 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Compliance profile updated successfully.",
-        complianceProfile: updateComplianceProfile(body, user.fullName),
-        workspaceConfig: getPublicWorkspaceConfig(),
+        complianceProfile: updateComplianceProfile(workspaceKey, body, user.fullName),
+        workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
     if (routeKey === "POST /api/admin/backups") {
@@ -262,14 +293,14 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 201, {
         message: "Backup snapshot created successfully.",
-        backup: createBackupSnapshot(optionalText(body.reason) || "manual-backup", user.fullName),
-        backups: getOwnerControlCenter().backups,
+        backup: createBackupSnapshot(workspaceKey, optionalText(body.reason) || "manual-backup", user.fullName),
+        backups: getOwnerControlCenter(workspaceKey).backups,
       });
     }
     if (routeKey === "POST /api/admin/backups/restore") {
       requireOwner(user, "Only the owner can restore backup snapshots.");
       const body = await readJson(req);
-      const restore = restoreBackupSnapshot(body.fileName, user.fullName);
+      const restore = restoreBackupSnapshot(workspaceKey, body.fileName, user.fullName);
       destroySession(req, res);
       return sendJson(res, 200, {
         message: "Backup restored successfully. Please sign in again to continue.",
@@ -279,7 +310,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (routeKey === "GET /api/admin/backups/download") {
       requireOwner(user, "Only the owner can download backup snapshots.");
-      const backup = getBackupSnapshot(url.searchParams.get("fileName"));
+      const backup = getBackupSnapshot(workspaceKey, url.searchParams.get("fileName"));
       const body = JSON.stringify(backup.snapshot, null, 2);
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
@@ -291,7 +322,7 @@ const server = http.createServer(async (req, res) => {
     if (routeKey === "POST /api/products") {
       requireOwner(user, "Only the owner can create products.");
       const body = await readJson(req);
-      addOrStockInProduct({
+      addOrStockInProduct(workspaceKey, {
         name: body.name,
         productCode: body.productCode,
         unitPrice: body.unitPrice,
@@ -304,7 +335,7 @@ const server = http.createServer(async (req, res) => {
       requireOwner(user, "Only the owner can edit product details.");
       const productId = decodeURIComponent(url.pathname.split("/").pop());
       const body = await readJson(req);
-      updateProductDetails({
+      updateProductDetails(workspaceKey, {
         productId,
         name: body.name,
         productCode: body.productCode,
@@ -317,7 +348,7 @@ const server = http.createServer(async (req, res) => {
       const parts = url.pathname.split("/");
       const productId = decodeURIComponent(parts[3]);
       const body = await readJson(req);
-      adjustProductStock({
+      adjustProductStock(workspaceKey, {
         productId,
         quantity: body.quantity,
         actionType: body.actionType,
@@ -329,7 +360,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 201, {
         message: "Sale completed successfully.",
-        sale: createSale({
+        sale: createSale(workspaceKey, {
           customerName: body.customerName,
           phoneNumber: body.phoneNumber,
           processedBy: optionalText(body.processedBy) || user.fullName,
@@ -342,23 +373,23 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       return sendJson(res, 200, {
         message: "Debt payment processed successfully.",
-        debtPayment: createDebtPayment({
+        debtPayment: createDebtPayment(workspaceKey, {
           customerName: body.customerName,
           payments: body.payments,
         }),
       });
     }
     if (routeKey === "GET /api/reports/daily") {
-      return sendJson(res, 200, buildReport("daily", url.searchParams.get("date")));
+      return sendJson(res, 200, buildReport(workspaceKey, "daily", url.searchParams.get("date")));
     }
     if (routeKey === "GET /api/reports/weekly") {
-      return sendJson(res, 200, buildReport("weekly", url.searchParams.get("date")));
+      return sendJson(res, 200, buildReport(workspaceKey, "weekly", url.searchParams.get("date")));
     }
     if (routeKey === "GET /api/reports/monthly") {
-      return sendJson(res, 200, buildReport("monthly", url.searchParams.get("date")));
+      return sendJson(res, 200, buildReport(workspaceKey, "monthly", url.searchParams.get("date")));
     }
     if (routeKey === "GET /api/reports/annual") {
-      return sendJson(res, 200, buildReport("annual", url.searchParams.get("date")));
+      return sendJson(res, 200, buildReport(workspaceKey, "annual", url.searchParams.get("date")));
     }
 
     if (req.method === "GET" && !url.pathname.startsWith("/api/")) {

@@ -1548,6 +1548,18 @@ th {
   border-color: rgba(214, 167, 66, 0.16);
 }
 
+.auth-workspace-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.auth-workspace-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .auth-proof-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
