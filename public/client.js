@@ -103,12 +103,23 @@ function businessPlaceholderLogo(name = "Business") {
 }
 
 function selectedWorkspaceSummary() {
-  const selectedKey = readState()?.authWorkspaceKey || getLastWorkspaceKey();
+  const appState = readState();
+  const selectedKey = appState?.authWorkspaceKey || getLastWorkspaceKey();
   if (!selectedKey) {
     return null;
   }
-  const workspaces = Array.isArray(readState()?.bootstrap?.workspaces) ? readState().bootstrap.workspaces : [];
-  return workspaces.find((workspace) => workspace.workspaceKey === selectedKey) || null;
+
+  if (!Array.isArray(appState?.bootstrap?.workspaces)) {
+    return null;
+  }
+
+  for (const workspace of appState.bootstrap.workspaces) {
+    if (workspace.workspaceKey === selectedKey) {
+      return workspace;
+    }
+  }
+
+  return null;
 }
 
 function selectedWorkspaceLogo() {
@@ -117,26 +128,52 @@ function selectedWorkspaceLogo() {
 }
 
 function currentBusinessName() {
-  if (!readState()?.bootstrap?.user) {
+  const appState = readState();
+  if (!appState?.bootstrap?.user) {
     return "";
   }
+
   const business = currentBusinessProfile();
-  return business.businessName || readState()?.bootstrap?.activeWorkspace?.businessName || "";
+  if (business.businessName) {
+    return business.businessName;
+  }
+  if (appState.bootstrap.activeWorkspace?.businessName) {
+    return appState.bootstrap.activeWorkspace.businessName;
+  }
+  return "";
 }
 
 function currentBusinessBranch() {
-  if (!readState()?.bootstrap?.user) {
+  const appState = readState();
+  if (!appState?.bootstrap?.user) {
     return "Main Branch";
   }
-  return currentBusinessProfile().branchName || readState()?.bootstrap?.activeWorkspace?.branchName || "Main Branch";
+
+  const business = currentBusinessProfile();
+  if (business.branchName) {
+    return business.branchName;
+  }
+  if (appState.bootstrap.activeWorkspace?.branchName) {
+    return appState.bootstrap.activeWorkspace.branchName;
+  }
+  return "Main Branch";
 }
 
 function currentBusinessLogo() {
-  if (!readState()?.bootstrap?.user) {
+  const appState = readState();
+  if (!appState?.bootstrap?.user) {
     return PRODUCT_LOGO;
   }
+
   const businessName = currentBusinessName() || "Business";
-  return currentBusinessProfile().logoDataUrl || readState()?.bootstrap?.activeWorkspace?.logoDataUrl || businessPlaceholderLogo(businessName);
+  const business = currentBusinessProfile();
+  if (business.logoDataUrl) {
+    return business.logoDataUrl;
+  }
+  if (appState.bootstrap.activeWorkspace?.logoDataUrl) {
+    return appState.bootstrap.activeWorkspace.logoDataUrl;
+  }
+  return businessPlaceholderLogo(businessName);
 }
 
 function mergeWorkspaceSummaryIntoBootstrap(summary) {
@@ -153,11 +190,15 @@ function mergeWorkspaceSummaryIntoBootstrap(summary) {
   }
 
   if (Array.isArray(state.bootstrap.workspaces)) {
-    state.bootstrap.workspaces = state.bootstrap.workspaces.map((workspace) => (
-      workspace.workspaceKey === workspaceKey
-        ? { ...workspace, ...summary }
-        : workspace
-    ));
+    const nextWorkspaces = [];
+    for (const workspace of state.bootstrap.workspaces) {
+      if (workspace.workspaceKey === workspaceKey) {
+        nextWorkspaces.push({ ...workspace, ...summary });
+      } else {
+        nextWorkspaces.push(workspace);
+      }
+    }
+    state.bootstrap.workspaces = nextWorkspaces;
   }
 }
 
@@ -182,15 +223,24 @@ function applyBusinessProfileToState(profile = {}, workspaceSummary = null) {
   }
 
   const currentSummary = state.bootstrap.activeWorkspace || {};
-  mergeWorkspaceSummaryIntoBootstrap(workspaceSummary || {
-    ...currentSummary,
-    workspaceKey: currentSummary.workspaceKey || currentWorkspaceKey(),
-    businessName: nextProfile.businessName || currentSummary.businessName || state.bootstrap.businessName || "Business Workspace",
-    branchName: nextProfile.branchName || currentSummary.branchName || "Main Branch",
-    logoDataUrl: Object.prototype.hasOwnProperty.call(nextProfile, "logoDataUrl")
-      ? (nextProfile.logoDataUrl || "")
-      : (currentSummary.logoDataUrl || ""),
-  });
+  let nextSummary = workspaceSummary;
+
+  if (!nextSummary) {
+    let nextLogo = currentSummary.logoDataUrl || "";
+    if (Object.prototype.hasOwnProperty.call(nextProfile, "logoDataUrl")) {
+      nextLogo = nextProfile.logoDataUrl || "";
+    }
+
+    nextSummary = {
+      ...currentSummary,
+      workspaceKey: currentSummary.workspaceKey || currentWorkspaceKey(),
+      businessName: nextProfile.businessName || currentSummary.businessName || state.bootstrap.businessName || "Business Workspace",
+      branchName: nextProfile.branchName || currentSummary.branchName || "Main Branch",
+      logoDataUrl: nextLogo,
+    };
+  }
+
+  mergeWorkspaceSummaryIntoBootstrap(nextSummary);
 
   if (state.ownerControl) {
     state.ownerControl = {
