@@ -4,11 +4,15 @@
   "id": "/",
   "start_url": "/",
   "scope": "/",
+  "lang": "en",
+  "dir": "ltr",
   "display": "standalone",
   "display_override": ["standalone", "window-controls-overlay"],
+  "orientation": "any",
   "background_color": "#0b0b0f",
   "theme_color": "#0b0b0f",
   "description": "Business suite for checkout, inventory, reporting, staff access, and sales operations.",
+  "prefer_related_applications": false,
   "categories": ["business", "productivity", "finance"],
   "icons": [
     {
@@ -22,6 +26,20 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open the suite dashboard and workspace overview.",
+      "url": "/"
+    },
+    {
+      "name": "Point of Sale",
+      "short_name": "POS",
+      "description": "Open the business workspace and continue with sales operations.",
+      "url": "/"
     }
   ]
 }

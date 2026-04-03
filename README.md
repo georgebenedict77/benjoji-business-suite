@@ -72,6 +72,27 @@ The GitHub Pages landing site for the suite is published at:
 https://georgebenedict77.github.io/benjoji-business-suite/
 ```
 
+## Full App Deployment
+
+The repository is now prepared for full hosted deployment too, not just the public landing site.
+
+- Render blueprint: [render.yaml](./render.yaml)
+- Docker runtime: [Dockerfile](./Dockerfile)
+- deployment guide: [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+For Render, the suite is set up to use:
+
+- a persistent disk for SQLite workspace data and backups
+- secure production cookies
+- a health check at `/api/health`
+- `0.0.0.0` host binding for hosted environments
+
+Render one-click deploy URL:
+
+```text
+https://render.com/deploy?repo=https://github.com/georgebenedict77/benjoji-business-suite
+```
+
 ## Installing The App
 
 ### Windows
@@ -82,7 +103,7 @@ https://georgebenedict77.github.io/benjoji-business-suite/
 
 ### Android
 
-- The full operational app must be hosted on a secure public URL before Android installation works properly
+- The full operational app should be deployed to a secure public URL first
 - Open the hosted app in Chrome
 - Use `Install App` or `Add to Home screen`
 
@@ -93,6 +114,16 @@ https://georgebenedict77.github.io/benjoji-business-suite/
 - Choose `Add to Home Screen`
 
 GitHub Pages currently hosts the public landing site only. The full business runtime still needs Node hosting for real checkout, stock, reporting, and workspace operations.
+
+## Local Network Preview
+
+To preview the suite from another device on the same Wi-Fi network:
+
+```powershell
+.\start-lan.ps1
+```
+
+This exposes the app on your local network and prints the phone/tablet URL. It is useful for preview and testing, but a proper public HTTPS deployment is still the right path for full mobile installability.
 
 ## Verification
 

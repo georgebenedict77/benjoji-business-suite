@@ -1,4 +1,4 @@
-const CACHE_NAME = "benjoji-business-suite-v1";
+const CACHE_NAME = "benjoji-business-suite-v2";
 const APP_SHELL = [
   "/",
   "/index.html",

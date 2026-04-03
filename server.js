@@ -1,6 +1,7 @@
+const fs = require("node:fs");
 const http = require("node:http");
 const { URL } = require("node:url");
-const { createWorkspace, getBusinessName, getWorkspaceSummary, listWorkspaceSummaries } = require("./lib/workspace-db");
+const { ROOT_DATA_DIR, createWorkspace, getBusinessName, getWorkspaceSummary, listWorkspaceSummaries } = require("./lib/workspace-db");
 const {
   beginLogin,
   completeSecondFactorLogin,
@@ -47,7 +48,7 @@ const {
 const { readJson, sendError, sendJson, serveStatic } = require("./lib/http");
 const { normalizeRole, optionalText, requireText } = require("./lib/utils");
 
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || (process.env.NODE_ENV === "production" || process.env.RENDER === "true" ? "0.0.0.0" : "127.0.0.1");
 const PORT = Number(process.env.PORT || 3000);
 
 function requireOwner(user, message = "Only the owner can perform this action.") {
@@ -83,6 +84,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         status: "ok",
         product: "Benjoji Business Suite",
+        host: HOST,
+        port: PORT,
+        environment: process.env.NODE_ENV || "development",
+        storageReady: fs.existsSync(ROOT_DATA_DIR),
+        dataRoot: ROOT_DATA_DIR,
+        workspaceCount: listWorkspaceSummaries().length,
         time: new Date().toISOString(),
       });
     }
@@ -116,7 +123,7 @@ const server = http.createServer(async (req, res) => {
         role,
       });
       configureInitialWorkspace(workspace.workspaceKey, body, body.fullName || body.username || "Owner");
-      const loggedInUser = loginUser(res, {
+      const loggedInUser = loginUser(req, res, {
         workspaceKey: workspace.workspaceKey,
         username: body.username,
         password: body.password,
@@ -167,7 +174,7 @@ const server = http.createServer(async (req, res) => {
 
     if (routeKey === "POST /api/auth/login") {
       const body = await readJson(req);
-      const result = beginLogin(res, body);
+      const result = beginLogin(req, res, body);
       return sendJson(res, 200, {
         message: result.requiresSecondFactor ? "Second authentication step required." : "Login successful.",
         ...result,
@@ -177,7 +184,7 @@ const server = http.createServer(async (req, res) => {
 
     if (routeKey === "POST /api/auth/login/verify-second-factor") {
       const body = await readJson(req);
-      const user = completeSecondFactorLogin(res, body);
+      const user = completeSecondFactorLogin(req, res, body);
       return sendJson(res, 200, { message: "Login successful.", user, businessName: getBusinessName(user.workspaceKey) });
     }
 

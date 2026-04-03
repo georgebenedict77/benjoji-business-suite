@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: benjoji-business-suite
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: false
+    disk:
+      name: benjoji-business-suite-data
+      mountPath: /var/data/benjoji
+      sizeGB: 5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: BENJOJI_DATA_DIR
+        value: /var/data/benjoji
+      - key: BENJOJI_SECURE_COOKIES
+        value: "true"
+      - key: BENJOJI_TRUST_PROXY
+        value: "true"

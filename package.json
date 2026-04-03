@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Business management platform for POS, inventory, debt tracking, reporting, backups, and workspace control.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "check:server": "node --check server.js",

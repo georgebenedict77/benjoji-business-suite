@@ -1,0 +1,16 @@
+.git
+.gitignore
+.edge-headless
+data
+data-test
+docs
+node_modules
+out
+sandbox-data
+sandbox-data-reports
+src
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+README.updated.md
