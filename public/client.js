@@ -62,8 +62,16 @@ function readState() {
 }
 
 function availablePaymentMethods() {
-  const enabled = readState()?.bootstrap?.workspaceConfig?.paymentProfile?.enabledMethods;
-  return Array.isArray(enabled) && enabled.length ? enabled : PAYMENT_METHODS;
+  const appState = readState();
+  if (!appState || !appState.bootstrap || !appState.bootstrap.workspaceConfig) {
+    return PAYMENT_METHODS;
+  }
+  const paymentProfile = appState.bootstrap.workspaceConfig.paymentProfile || {};
+  const enabled = paymentProfile.enabledMethods;
+  if (Array.isArray(enabled) && enabled.length) {
+    return enabled;
+  }
+  return PAYMENT_METHODS;
 }
 
 function defaultPaymentMethod() {
@@ -71,21 +79,33 @@ function defaultPaymentMethod() {
 }
 
 function getPaymentRouteConfig(method) {
-  return readState()?.bootstrap?.workspaceConfig?.paymentProfile?.routes?.[method] || {};
+  const appState = readState();
+  if (!appState || !appState.bootstrap || !appState.bootstrap.workspaceConfig) {
+    return {};
+  }
+  const paymentProfile = appState.bootstrap.workspaceConfig.paymentProfile || {};
+  const routes = paymentProfile.routes || {};
+  return routes[method] || {};
 }
 
 function currentBusinessProfile() {
-  return readState()?.bootstrap?.workspaceConfig?.businessProfile || {};
+  const appState = readState();
+  if (!appState || !appState.bootstrap || !appState.bootstrap.workspaceConfig) {
+    return {};
+  }
+  return appState.bootstrap.workspaceConfig.businessProfile || {};
 }
 
 function businessPlaceholderLogo(name = "Business") {
   const businessName = String(name || "Business").trim() || "Business";
-  const initials = businessName
-    .split(/\s+/)
-    .map((part) => part[0] || "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "B";
+  const nameParts = businessName.split(/\s+/);
+  let initials = "";
+  for (const part of nameParts) {
+    if (part[0]) {
+      initials += part[0];
+    }
+  }
+  initials = initials.slice(0, 2).toUpperCase() || "B";
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
       <defs>
@@ -104,12 +124,12 @@ function businessPlaceholderLogo(name = "Business") {
 
 function selectedWorkspaceSummary() {
   const appState = readState();
-  const selectedKey = appState?.authWorkspaceKey || getLastWorkspaceKey();
+  const selectedKey = (appState && appState.authWorkspaceKey) || getLastWorkspaceKey();
   if (!selectedKey) {
     return null;
   }
 
-  if (!Array.isArray(appState?.bootstrap?.workspaces)) {
+  if (!appState || !appState.bootstrap || !Array.isArray(appState.bootstrap.workspaces)) {
     return null;
   }
 
@@ -124,12 +144,16 @@ function selectedWorkspaceSummary() {
 
 function selectedWorkspaceLogo() {
   const workspace = selectedWorkspaceSummary();
-  return workspace?.logoDataUrl || businessPlaceholderLogo(workspace?.businessName || "Business");
+  if (workspace && workspace.logoDataUrl) {
+    return workspace.logoDataUrl;
+  }
+  const businessName = workspace && workspace.businessName ? workspace.businessName : "Business";
+  return businessPlaceholderLogo(businessName);
 }
 
 function currentBusinessName() {
   const appState = readState();
-  if (!appState?.bootstrap?.user) {
+  if (!appState || !appState.bootstrap || !appState.bootstrap.user) {
     return "";
   }
 
@@ -137,7 +161,7 @@ function currentBusinessName() {
   if (business.businessName) {
     return business.businessName;
   }
-  if (appState.bootstrap.activeWorkspace?.businessName) {
+  if (appState.bootstrap.activeWorkspace && appState.bootstrap.activeWorkspace.businessName) {
     return appState.bootstrap.activeWorkspace.businessName;
   }
   return "";
@@ -145,7 +169,7 @@ function currentBusinessName() {
 
 function currentBusinessBranch() {
   const appState = readState();
-  if (!appState?.bootstrap?.user) {
+  if (!appState || !appState.bootstrap || !appState.bootstrap.user) {
     return "Main Branch";
   }
 
@@ -153,7 +177,7 @@ function currentBusinessBranch() {
   if (business.branchName) {
     return business.branchName;
   }
-  if (appState.bootstrap.activeWorkspace?.branchName) {
+  if (appState.bootstrap.activeWorkspace && appState.bootstrap.activeWorkspace.branchName) {
     return appState.bootstrap.activeWorkspace.branchName;
   }
   return "Main Branch";
@@ -161,7 +185,7 @@ function currentBusinessBranch() {
 
 function currentBusinessLogo() {
   const appState = readState();
-  if (!appState?.bootstrap?.user) {
+  if (!appState || !appState.bootstrap || !appState.bootstrap.user) {
     return PRODUCT_LOGO;
   }
 
@@ -170,7 +194,7 @@ function currentBusinessLogo() {
   if (business.logoDataUrl) {
     return business.logoDataUrl;
   }
-  if (appState.bootstrap.activeWorkspace?.logoDataUrl) {
+  if (appState.bootstrap.activeWorkspace && appState.bootstrap.activeWorkspace.logoDataUrl) {
     return appState.bootstrap.activeWorkspace.logoDataUrl;
   }
   return businessPlaceholderLogo(businessName);
