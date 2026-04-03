@@ -8,6 +8,11 @@ const PRODUCT_NAME = "Benjoji Business Suite";
 const PRODUCT_LABEL = "Business Management Platform";
 const PRODUCT_LOGO = "/benjoji-business-suite-logo.png";
 const INTRO_DURATION_MS = 5500;
+const MAX_IMAGE_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_SIZE_LABEL = "20MB";
+const LOGO_IMAGE_MAX_DIMENSION = 1600;
+const LOGO_IMAGE_OUTPUT_QUALITY = 0.9;
+const pendingLogoUploads = new WeakMap();
 
 function getReceiptPrintDefault() {
   return localStorage.getItem("benjoji_receipt_print_default") !== "false";
@@ -44,6 +49,30 @@ function currentBusinessProfile() {
   return readState()?.bootstrap?.workspaceConfig?.businessProfile || {};
 }
 
+function businessPlaceholderLogo(name = "Business") {
+  const safeName = String(name || "Business").trim() || "Business";
+  const initials = safeName
+    .split(/\s+/)
+    .map((part) => part[0] || "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "B";
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+      <defs>
+        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#191919"/>
+          <stop offset="100%" stop-color="#2a2110"/>
+        </linearGradient>
+      </defs>
+      <rect width="160" height="160" rx="34" fill="url(#g)"/>
+      <circle cx="80" cy="80" r="58" fill="none" stroke="#d7a54a" stroke-width="5"/>
+      <text x="80" y="95" text-anchor="middle" fill="#f3c86d" font-family="Georgia, serif" font-size="54" font-weight="700">${initials}</text>
+    </svg>
+  `;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 function selectedWorkspaceSummary() {
   const selectedKey = readState()?.authWorkspaceKey || getLastWorkspaceKey();
   if (!selectedKey) {
@@ -51,6 +80,11 @@ function selectedWorkspaceSummary() {
   }
   const workspaces = Array.isArray(readState()?.bootstrap?.workspaces) ? readState().bootstrap.workspaces : [];
   return workspaces.find((workspace) => workspace.workspaceKey === selectedKey) || null;
+}
+
+function selectedWorkspaceLogo() {
+  const workspace = selectedWorkspaceSummary();
+  return workspace?.logoDataUrl || businessPlaceholderLogo(workspace?.businessName || "Business");
 }
 
 function currentBusinessName() {
@@ -72,7 +106,113 @@ function currentBusinessLogo() {
   if (!readState()?.bootstrap?.user) {
     return PRODUCT_LOGO;
   }
-  return currentBusinessProfile().logoDataUrl || PRODUCT_LOGO;
+  const businessName = currentBusinessName() || "Business";
+  return currentBusinessProfile().logoDataUrl || readState()?.bootstrap?.activeWorkspace?.logoDataUrl || businessPlaceholderLogo(businessName);
+}
+
+function mergeWorkspaceSummaryIntoBootstrap(summary) {
+  if (!summary || !state.bootstrap) {
+    return;
+  }
+
+  const workspaceKey = summary.workspaceKey || currentWorkspaceKey();
+  if (state.bootstrap.activeWorkspace && state.bootstrap.activeWorkspace.workspaceKey === workspaceKey) {
+    state.bootstrap.activeWorkspace = {
+      ...state.bootstrap.activeWorkspace,
+      ...summary,
+    };
+  }
+
+  if (Array.isArray(state.bootstrap.workspaces)) {
+    state.bootstrap.workspaces = state.bootstrap.workspaces.map((workspace) => (
+      workspace.workspaceKey === workspaceKey
+        ? { ...workspace, ...summary }
+        : workspace
+    ));
+  }
+}
+
+function applyBusinessProfileToState(profile = {}, workspaceSummary = null) {
+  if (!state.bootstrap) {
+    return;
+  }
+
+  const currentProfile = currentBusinessProfile();
+  const nextProfile = {
+    ...currentProfile,
+    ...profile,
+  };
+
+  state.bootstrap.workspaceConfig = {
+    ...(state.bootstrap.workspaceConfig || {}),
+    businessProfile: nextProfile,
+  };
+
+  if (nextProfile.businessName) {
+    state.bootstrap.businessName = nextProfile.businessName;
+  }
+
+  const currentSummary = state.bootstrap.activeWorkspace || {};
+  mergeWorkspaceSummaryIntoBootstrap(workspaceSummary || {
+    ...currentSummary,
+    workspaceKey: currentSummary.workspaceKey || currentWorkspaceKey(),
+    businessName: nextProfile.businessName || currentSummary.businessName || state.bootstrap.businessName || "Business Workspace",
+    branchName: nextProfile.branchName || currentSummary.branchName || "Main Branch",
+    logoDataUrl: Object.prototype.hasOwnProperty.call(nextProfile, "logoDataUrl")
+      ? (nextProfile.logoDataUrl || "")
+      : (currentSummary.logoDataUrl || ""),
+  });
+
+  if (state.ownerControl) {
+    state.ownerControl = {
+      ...state.ownerControl,
+      businessProfile: {
+        ...(state.ownerControl.businessProfile || {}),
+        ...nextProfile,
+      },
+    };
+  }
+}
+
+function syncWorkspaceBrandPreviewFromBusinessForm(form) {
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const data = formDataObject(form);
+  const currentProfile = currentBusinessProfile();
+  const businessName = (data.businessName || currentProfile.businessName || currentBusinessName() || "Business").trim() || "Business";
+  const branchName = (data.branchName || currentProfile.branchName || currentBusinessBranch() || "Main Branch").trim() || "Main Branch";
+  const logoDataUrl = Object.prototype.hasOwnProperty.call(data, "logoDataUrl")
+    ? (data.logoDataUrl || "")
+    : (currentProfile.logoDataUrl || "");
+  const effectiveLogo = logoDataUrl || businessPlaceholderLogo(businessName);
+
+  applyBusinessProfileToState({
+    ...currentProfile,
+    businessName,
+    branchName,
+    logoDataUrl,
+  });
+
+  document.querySelectorAll(".brand-logo").forEach((node) => {
+    if (node instanceof HTMLImageElement) {
+      node.src = effectiveLogo;
+      node.alt = `${businessName} logo`;
+    }
+  });
+  document.querySelectorAll(".super-brand-name").forEach((node) => {
+    node.textContent = businessName;
+  });
+  document.querySelectorAll(".super-brand-role").forEach((node) => {
+    node.textContent = branchName;
+  });
+  document.querySelectorAll(".super-view-kicker").forEach((node) => {
+    node.textContent = `${businessName} Workspace`;
+  });
+  document.querySelectorAll(".super-branch-chip span").forEach((node) => {
+    node.textContent = branchName;
+  });
 }
 
 function currentWorkspaceKey() {
@@ -601,7 +741,7 @@ function renderAuthScreen() {
               selectedWorkspace
                 ? `
               <div class="auth-workspace-callout">
-                <img class="auth-workspace-callout-logo" src="${escapeAttr(PRODUCT_LOGO)}" alt="${escapeAttr(PRODUCT_NAME)} logo" />
+                <img class="auth-workspace-callout-logo" src="${escapeAttr(selectedWorkspaceLogo())}" alt="${escapeAttr(selectedWorkspace.businessName)} logo" />
                 <div>
                   <strong>Saved Workspace Ready</strong>
                   <span>${escapeHtml(selectedWorkspace.businessName)} | ${escapeHtml(selectedWorkspace.workspaceKey)} | Use Login to continue into that business.</span>
@@ -706,7 +846,7 @@ function renderAuthHeroPreview({ hasWorkspaces, selectedWorkspace }) {
           ? `
         <div class="auth-interface-mini auth-interface-workspace">
           <div class="auth-interface-brand">
-            <img src="${escapeAttr(PRODUCT_LOGO)}" alt="${escapeAttr(PRODUCT_NAME)} logo" />
+            <img src="${escapeAttr(selectedWorkspace.logoDataUrl || businessPlaceholderLogo(selectedWorkspace.businessName))}" alt="${escapeAttr(selectedWorkspace.businessName)} logo" />
             <div>
               <span>Saved Workspace</span>
               <strong>${escapeHtml(selectedWorkspace.businessName)}</strong>
@@ -803,7 +943,7 @@ function renderAuthPopup() {
 
   return `
     <div class="modal-layer open auth-popup-layer">
-      <button class="settings-backdrop" data-action="close-auth-popup" aria-label="Close auth popup"></button>
+      <button type="button" class="settings-backdrop" data-action="close-auth-popup" aria-label="Close auth popup"></button>
       <div class="inventory-modal auth-modal app-card" role="dialog" aria-modal="true" aria-labelledby="auth-popup-title">
         <div class="section-header">
           <div>
@@ -817,7 +957,7 @@ function renderAuthPopup() {
           !state.authChallenge && selectedWorkspace && state.authTab === "password"
             ? `
           <div class="auth-workspace-banner">
-            <img class="auth-workspace-banner-logo" src="${escapeAttr(PRODUCT_LOGO)}" alt="${escapeAttr(PRODUCT_NAME)} logo" />
+            <img class="auth-workspace-banner-logo" src="${escapeAttr(selectedWorkspace.logoDataUrl || businessPlaceholderLogo(selectedWorkspace.businessName))}" alt="${escapeAttr(selectedWorkspace.businessName)} logo" />
             <div>
               <strong>${escapeHtml(selectedWorkspace.businessName)}</strong>
               <span>${escapeHtml(selectedWorkspace.branchName || "Main Branch")} | Workspace ID: ${escapeHtml(workspaceKey || "Not selected")}</span>
@@ -868,29 +1008,30 @@ function renderBusinessWorkspaceOptions() {
   `;
 }
 
-function renderBusinessLogoEditor({ hiddenName, value = "", label = "Business Logo", helper = "", removeAction = "" }) {
+function renderBusinessLogoEditor({ hiddenName, value = "", label = "Business Logo", helper = "", removeAction = "", fallbackName = "Business" }) {
   const hasCustomLogo = Boolean(value);
+  const fallbackLogo = businessPlaceholderLogo(fallbackName);
   return `
     <div class="field full-span business-logo-field">
       <label>${escapeHtml(label)}</label>
       <div class="business-logo-editor">
         <div class="business-logo-preview ${hasCustomLogo ? "" : "using-fallback"}">
           <img
-            src="${escapeAttr(value || PRODUCT_LOGO)}"
-            alt="${hasCustomLogo ? "Business logo preview" : "Suite logo preview"}"
+            src="${escapeAttr(value || fallbackLogo)}"
+            alt="${hasCustomLogo ? "Business logo preview" : "Business placeholder preview"}"
             data-business-logo-preview
-            data-fallback-src="${escapeAttr(PRODUCT_LOGO)}"
+            data-fallback-src="${escapeAttr(fallbackLogo)}"
           />
         </div>
         <div class="business-logo-editor-copy">
           <input type="hidden" name="${escapeAttr(hiddenName)}" value="${escapeAttr(value)}" />
           <input type="file" accept="image/*" data-action="business-logo-upload" />
           <div class="helper-text" data-business-logo-status>
-            ${escapeHtml(helper || (hasCustomLogo ? "Custom business logo ready for this workspace." : "Upload a business logo or keep the suite logo until the business adds one."))}
+            ${escapeHtml(helper || (hasCustomLogo ? `Custom business logo ready for this workspace. Images up to ${MAX_IMAGE_UPLOAD_SIZE_LABEL} are supported and large files are optimized automatically.` : `Upload a business logo up to ${MAX_IMAGE_UPLOAD_SIZE_LABEL}, or continue with a company placeholder until one is added. Large images are optimized automatically.`))}
           </div>
           ${
             removeAction
-              ? `<button type="button" class="ghost-button compact-button" data-action="${escapeAttr(removeAction)}">Use Suite Logo Instead</button>`
+              ? `<button type="button" class="ghost-button compact-button" data-action="${escapeAttr(removeAction)}">Remove Custom Logo</button>`
               : ""
           }
         </div>
@@ -925,6 +1066,7 @@ function renderSetupForm() {
       </div>
       ${renderBusinessLogoEditor({
         hiddenName: "logoDataUrl",
+        fallbackName: "Business",
         helper: "This appears inside the business workspace after login.",
       })}
       <div class="field">
@@ -1192,7 +1334,7 @@ function renderSecurityModal() {
   const defaultMode = state.bootstrap?.user?.hasPin ? "pin" : "password";
   return `
     <div class="modal-layer open security-layer">
-      <button class="settings-backdrop" data-action="cancel-security-prompt" aria-label="Close security prompt"></button>
+      <button type="button" class="settings-backdrop" data-action="cancel-security-prompt" aria-label="Close security prompt"></button>
       <div class="inventory-modal security-modal app-card">
         <div class="section-header">
           <div>
@@ -1249,7 +1391,7 @@ function renderSalePaymentModal() {
 
   return `
       <div class="modal-layer open pos-payment-layer">
-        <button class="settings-backdrop" data-action="close-sale-payment" aria-label="Close payment popup"></button>
+        <button type="button" class="settings-backdrop" data-action="close-sale-payment" aria-label="Close payment popup"></button>
         <div class="inventory-modal payment-modal app-card" role="dialog" aria-modal="true" aria-labelledby="sale-payment-title">
           <div class="section-header payment-modal-header">
             <div>
@@ -1306,7 +1448,7 @@ function renderReceiptModal() {
   const receiptNumber = state.paymentWorkflow.sale?.receiptNumber || "Receipt";
   return `
     <div class="modal-layer open receipt-layer">
-      <button class="settings-backdrop" data-action="close-receipt-popup" aria-label="Close receipt popup"></button>
+      <button type="button" class="settings-backdrop" data-action="close-receipt-popup" aria-label="Close receipt popup"></button>
       <div class="inventory-modal receipt-modal app-card" role="dialog" aria-modal="true" aria-labelledby="receipt-popup-title">
         <div class="section-header">
           <div>
@@ -1386,7 +1528,7 @@ function renderAppShell() {
                 <span data-live-date></span>
                 <strong data-live-time></strong>
               </div>
-              <button class="menu-trigger" data-action="toggle-settings" aria-label="Open settings">
+              <button type="button" class="menu-trigger" data-action="toggle-settings" aria-label="Open settings">
                 ${icon("menu")}
               </button>
               <button class="secondary-button topbar-logout-button" type="button" data-action="logout">
@@ -1473,7 +1615,7 @@ function renderPosStatusPills() {
 
 function navButton(view, label, iconName) {
   return `
-    <button class="rail-button super-nav-button ${state.activeView === view ? "active" : ""}" data-action="navigate" data-view="${view}">
+    <button type="button" class="rail-button super-nav-button ${state.activeView === view ? "active" : ""}" data-action="navigate" data-view="${view}">
       ${icon(iconName)}
       <span>${escapeHtml(label)}</span>
     </button>
@@ -1492,7 +1634,7 @@ function renderSettingsDrawer() {
 
   return `
       <div class="settings-layer ${state.settingsOpen ? "open" : ""}">
-        <button class="settings-backdrop" data-action="close-settings" aria-label="Close settings"></button>
+        <button type="button" class="settings-backdrop" data-action="close-settings" aria-label="Close settings"></button>
         <aside class="settings-drawer app-card">
           <div class="drawer-header">
             <div>
@@ -1754,6 +1896,19 @@ function renderSettingsCard(item) {
     `;
 }
 
+function renderActionChoiceButton({ title, description = "", iconName, tone = "blue", type = "button", attrs = "", badge = "" }) {
+  return `
+    <button type="${escapeAttr(type)}" class="action-choice-card tone-${escapeAttr(tone)}" ${attrs}>
+      <span class="action-choice-icon">${icon(iconName)}</span>
+      <span class="action-choice-copy">
+        <strong>${escapeHtml(title)}</strong>
+        ${description ? `<span>${escapeHtml(description)}</span>` : ""}
+      </span>
+      ${badge ? `<span class="action-choice-badge">${escapeHtml(badge)}</span>` : ""}
+    </button>
+  `;
+}
+
 function renderActiveView() {
   switch (state.activeView) {
     case "control":
@@ -1826,6 +1981,7 @@ function renderControlCenterView() {
             ${renderBusinessLogoEditor({
               hiddenName: "logoDataUrl",
               value: business.logoDataUrl || "",
+              fallbackName: business.businessName || state.bootstrap.businessName || "Business",
               helper: "This logo appears on the workspace rail and business-branded areas after login.",
               removeAction: "clear-business-logo",
             })}
@@ -1870,7 +2026,7 @@ function renderControlCenterView() {
           <form id="payment-profile-form" class="form-grid control-payment-form">
             <div class="full-span auth-checkbox-grid">
               ${PAYMENT_METHODS.map((method) => `
-                <label class="auth-check-card">
+                <label class="auth-check-card payment-method-card ${payments.enabledMethods?.includes(method) ? "active" : ""}" data-payment-method-card="${escapeAttr(method)}">
                   <input type="checkbox" name="enabledMethods" value="${escapeAttr(method)}" ${payments.enabledMethods?.includes(method) ? "checked" : ""} />
                   <span>${escapeHtml(method)}</span>
                 </label>
@@ -1960,7 +2116,7 @@ function renderControlCenterView() {
           <div class="section-header">
             <div>
               <div class="eyebrow">Compliance & Legal</div>
-              <h2 class="section-title">Store the owner’s operating rules and acknowledgement</h2>
+              <h2 class="section-title">Store the owner's operating rules and acknowledgement</h2>
               <div class="section-subtitle">This creates a visible compliance record inside the suite. It is not a substitute for local legal review.</div>
             </div>
           </div>
@@ -1987,18 +2143,29 @@ function renderControlCenterView() {
 
 function renderPaymentRouteEditor(method, route, enabled) {
   return `
-    <div class="field">
-      <label>${escapeHtml(method)} Label</label>
-      <input name="route_${escapeAttr(method)}_label" value="${escapeAttr(route.label || "")}" />
-    </div>
-    <div class="field">
-      <label>${escapeHtml(method)} Target</label>
-      <input name="route_${escapeAttr(method)}_target" value="${escapeAttr(route.targetNumber || "")}" />
-    </div>
-    <div class="field">
-      <label>${escapeHtml(method)} Account / Desk</label>
-      <input name="route_${escapeAttr(method)}_account" value="${escapeAttr(route.accountName || "")}" />
-    </div>
+    <section class="full-span control-route-card ${enabled ? "enabled" : "disabled"}" data-route-method="${escapeAttr(method)}">
+      <div class="control-route-card-head">
+        <div>
+          <h3>${escapeHtml(method)}</h3>
+          <p>${enabled ? "This payment method is active for the business. Update its destination and labels here." : "Enable this method above if the business should collect payments through it."}</p>
+        </div>
+        <span class="workspace-chip subtle" data-route-status>${enabled ? "Enabled" : "Disabled"}</span>
+      </div>
+      <div class="control-route-grid">
+        <div class="field">
+          <label>${escapeHtml(method)} Label</label>
+          <input name="route_${escapeAttr(method)}_label" value="${escapeAttr(route.label || "")}" ${enabled ? "" : "readonly"} />
+        </div>
+        <div class="field">
+          <label>${escapeHtml(method)} Target</label>
+          <input name="route_${escapeAttr(method)}_target" value="${escapeAttr(route.targetNumber || "")}" ${enabled ? "" : "readonly"} />
+        </div>
+        <div class="field">
+          <label>${escapeHtml(method)} Account / Desk</label>
+          <input name="route_${escapeAttr(method)}_account" value="${escapeAttr(route.accountName || "")}" ${enabled ? "" : "readonly"} />
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -2081,11 +2248,35 @@ function renderDashboardView() {
               <div class="section-subtitle">Jump straight into the next retail task.</div>
             </div>
           </div>
-          <div class="quick-action-stack">
-            <button class="primary-button quick-action dangerish" data-action="navigate" data-view="sales">Open POS</button>
-            <button class="secondary-button quick-action warningish" data-action="navigate" data-view="returns">Process Return</button>
-            <button class="secondary-button quick-action blueish" data-action="navigate" data-view="inventory">View Inventory</button>
-            <button class="secondary-button quick-action greenish" data-action="navigate" data-view="reports">View Reports</button>
+          <div class="section-action-grid quick-action-grid">
+            ${renderActionChoiceButton({
+              title: "Open POS",
+              description: "Move straight to the cashier desk and start scanning.",
+              iconName: "sales",
+              tone: "red",
+              attrs: `data-action="navigate" data-view="sales"`,
+            })}
+            ${renderActionChoiceButton({
+              title: "Process Return",
+              description: "Open the returns desk and handle reversal flow.",
+              iconName: "returns",
+              tone: "gold",
+              attrs: `data-action="navigate" data-view="returns"`,
+            })}
+            ${renderActionChoiceButton({
+              title: "View Inventory",
+              description: "Check products, stock levels, and low-stock items.",
+              iconName: "inventory",
+              tone: "blue",
+              attrs: `data-action="navigate" data-view="inventory"`,
+            })}
+            ${renderActionChoiceButton({
+              title: "View Reports",
+              description: "Open reports, accounting, and daily activity views.",
+              iconName: "reports",
+              tone: "green",
+              attrs: `data-action="navigate" data-view="reports"`,
+            })}
           </div>
         </section>
       </section>
@@ -2141,7 +2332,7 @@ function renderDashboardMetric(label, value, iconName, tone, detail = "", hint =
 
   if (detail) {
     return `
-      <button type="button" class="metric-card app-card super-metric-card tone-${tone} dashboard-metric-button ${state.dashboardDetail === detail ? "active" : ""}" data-action="set-dashboard-detail" data-detail="${detail}">
+      <button type="button" class="metric-card app-card super-metric-card tone-${tone} dashboard-metric-button ${state.dashboardDetail === detail ? "active" : ""}" data-action="set-dashboard-detail" data-detail="${detail}" aria-pressed="${state.dashboardDetail === detail ? "true" : "false"}">
         ${content}
       </button>
     `;
@@ -2272,7 +2463,7 @@ function renderInventoryView() {
         </div>
         ${
           canManage
-            ? `<button class="primary-button" data-action="open-inventory-form">Add New Product</button>`
+            ? `<button type="button" class="primary-button" data-action="open-inventory-form">Add New Product</button>`
             : `<div class="workspace-chip subtle">Owner access required to change inventory</div>`
         }
       </section>
@@ -2293,7 +2484,7 @@ function renderInventoryView() {
 
 function renderInventoryMetric(label, value, iconName, tone, detail, hint = "") {
   return `
-    <button type="button" class="metric-card app-card super-metric-card tone-${tone} dashboard-metric-button ${state.inventoryDetail === detail ? "active" : ""}" data-action="set-inventory-detail" data-detail="${detail}">
+    <button type="button" class="metric-card app-card super-metric-card tone-${tone} dashboard-metric-button ${state.inventoryDetail === detail ? "active" : ""}" data-action="set-inventory-detail" data-detail="${detail}" aria-pressed="${state.inventoryDetail === detail ? "true" : "false"}">
       <div class="super-metric-icon">${icon(iconName)}</div>
       <div>
         <div class="metric-label">${escapeHtml(label)}</div>
@@ -2394,7 +2585,7 @@ function renderInventoryModal() {
 
   return `
     <div class="modal-layer open">
-      <button class="settings-backdrop" data-action="close-inventory-form" aria-label="Close product form"></button>
+      <button type="button" class="settings-backdrop" data-action="close-inventory-form" aria-label="Close product form"></button>
       <div class="inventory-modal app-card">
         <div class="section-header">
           <div>
@@ -2859,8 +3050,8 @@ function renderHeldSalesView() {
                   <h3>${escapeHtml(heldSale.label)}</h3>
                   <p>${heldSale.items.length} items | ${money(heldSale.totalDue)} | Held at ${escapeHtml(heldSale.createdAt)}</p>
                 </div>
-                <button class="secondary-button" data-action="resume-held-sale" data-held-id="${escapeAttr(heldSale.id)}">Resume</button>
-                <button class="danger-button" data-action="delete-held-sale" data-held-id="${escapeAttr(heldSale.id)}">Delete</button>
+                <button type="button" class="secondary-button" data-action="resume-held-sale" data-held-id="${escapeAttr(heldSale.id)}">Resume</button>
+                <button type="button" class="danger-button" data-action="delete-held-sale" data-held-id="${escapeAttr(heldSale.id)}">Delete</button>
               </div>
             `).join("")}
           </div>
@@ -2886,6 +3077,29 @@ function renderReturnsView() {
           <div class="list-item">The UI lane for returns is now placed in the system like a supermarket counter.</div>
           <div class="list-item">Next step is connecting original receipt lookup, quantity reversal, and stock re-entry rules.</div>
           <div class="list-item">Until then, sales, held sales, debts, and inventory are fully usable from the same shell.</div>
+        </div>
+        <div class="section-action-grid returns-action-grid">
+          ${renderActionChoiceButton({
+            title: "Open POS",
+            description: "Go back to the cashier lane and continue selling.",
+            iconName: "sales",
+            tone: "red",
+            attrs: `data-action="navigate" data-view="sales"`,
+          })}
+          ${renderActionChoiceButton({
+            title: "Held Sales",
+            description: "Resume or clear suspended baskets from the queue.",
+            iconName: "returns",
+            tone: "gold",
+            attrs: `data-action="navigate" data-view="held"`,
+          })}
+          ${renderActionChoiceButton({
+            title: "Inventory",
+            description: "Check stock before processing any product return.",
+            iconName: "inventory",
+            tone: "blue",
+            attrs: `data-action="navigate" data-view="inventory"`,
+          })}
         </div>
       </section>
     </div>
@@ -3149,16 +3363,16 @@ function renderCartList() {
             <div class="muted">${money(item.unitPrice)} each</div>
           </div>
           <div class="cart-item-controls">
-            <button class="ghost-button compact-button" data-action="decrement-sale-item" data-index="${index}">-</button>
+            <button type="button" class="ghost-button compact-button" data-action="decrement-sale-item" data-index="${index}">-</button>
             <span class="cart-qty">${item.quantity}</span>
-            <button class="ghost-button compact-button" data-action="increment-sale-item" data-index="${index}">+</button>
+            <button type="button" class="ghost-button compact-button" data-action="increment-sale-item" data-index="${index}">+</button>
           </div>
           <div class="cart-item-total">${money(item.subtotal)}</div>
-          <button class="ghost-button compact-button" data-action="remove-sale-item" data-index="${index}">Remove</button>
+          <button type="button" class="ghost-button compact-button" data-action="remove-sale-item" data-index="${index}">Remove</button>
         </div>
       `).join("")}
       <div class="action-bar">
-        <button class="secondary-button" data-action="clear-sale-items">Clear Cart</button>
+        <button type="button" class="secondary-button" data-action="clear-sale-items">Clear Cart</button>
       </div>
     </div>
   `;
@@ -3209,7 +3423,7 @@ function renderPaymentDraftTable(payments, scope) {
           </div>
           <div class="payment-line-right">
             <strong>${money(payment.amount)}</strong>
-            <button class="ghost-button compact-button" data-action="${scope === "sale" ? "remove-sale-payment" : "remove-debt-payment"}" data-index="${index}">Remove</button>
+            <button type="button" class="ghost-button compact-button" data-action="${scope === "sale" ? "remove-sale-payment" : "remove-debt-payment"}" data-index="${index}">Remove</button>
           </div>
         </div>
       `).join("")}
@@ -3294,7 +3508,7 @@ function renderDebtsView() {
           </div>
 
           <div class="action-bar" style="margin-top: 18px;">
-            <button class="primary-button" data-action="finalize-debt-payment">Process Debt Payment</button>
+            <button type="button" class="primary-button" data-action="finalize-debt-payment">Process Debt Payment</button>
           </div>
 
           <div class="receipt-output" style="margin-top: 18px;">${state.debtDraft.output ? escapeHtml(state.debtDraft.output) : "Complete a debt payment to preview the receipt and approval messages."}</div>
@@ -3340,12 +3554,48 @@ function renderReportsView() {
               <label>Date</label>
               <input name="reportDate" type="date" value="${escapeAttr(state.reportDate)}" required />
             </div>
-            <div class="field full-span action-bar">
-              <button class="primary-button" name="kind" value="daily" type="submit">Generate Daily Report</button>
-              <button class="secondary-button" name="kind" value="weekly" type="submit">Generate Weekly Report</button>
-              <button class="secondary-button" name="kind" value="monthly" type="submit">Generate Monthly Report</button>
-              <button class="secondary-button" name="kind" value="annual" type="submit">Generate Annual Report</button>
-              <button class="ghost-button" type="button" data-action="show-accounting">Show Accounting Summary</button>
+            <div class="field full-span report-kind-field">
+              <div class="section-action-grid report-kind-grid">
+                ${renderActionChoiceButton({
+                  title: "Daily Report",
+                  description: "Summarize today or any selected day.",
+                  iconName: "reports",
+                  tone: "red",
+                  type: "submit",
+                  attrs: `name="kind" value="daily"`,
+                })}
+                ${renderActionChoiceButton({
+                  title: "Weekly Report",
+                  description: "See weekly sales and stock movement.",
+                  iconName: "dashboard",
+                  tone: "gold",
+                  type: "submit",
+                  attrs: `name="kind" value="weekly"`,
+                })}
+                ${renderActionChoiceButton({
+                  title: "Monthly Report",
+                  description: "Review monthly revenue and activity.",
+                  iconName: "inventory",
+                  tone: "blue",
+                  type: "submit",
+                  attrs: `name="kind" value="monthly"`,
+                })}
+                ${renderActionChoiceButton({
+                  title: "Annual Report",
+                  description: "Capture the yearly picture for accounting.",
+                  iconName: "database",
+                  tone: "green",
+                  type: "submit",
+                  attrs: `name="kind" value="annual"`,
+                })}
+                ${renderActionChoiceButton({
+                  title: "Accounting Summary",
+                  description: "Show the current accounting breakdown.",
+                  iconName: "cash",
+                  tone: "blue",
+                  attrs: `data-action="show-accounting"`,
+                })}
+              </div>
             </div>
           </form>
           <div class="report-output compact-output">${state.reportOutput ? escapeHtml(state.reportOutput) : "Choose a report type to preview it here."}</div>
@@ -3530,7 +3780,7 @@ function renderReportDayModal() {
 
   return `
     <div class="modal-layer open report-day-layer">
-      <button class="settings-backdrop" data-action="close-report-day-modal" aria-label="Close day activity popup"></button>
+      <button type="button" class="settings-backdrop" data-action="close-report-day-modal" aria-label="Close day activity popup"></button>
       <div class="inventory-modal report-day-modal app-card">
         <div class="section-header">
           <div>
@@ -4031,7 +4281,7 @@ function renderDebtTable(credits) {
               <td>${escapeHtml(credit.transactionId)}</td>
               <td>${money(credit.amountOwed)}</td>
               <td>${pill(statusTone(credit.status), credit.status)}</td>
-              <td><button class="secondary-button" data-action="select-credit" data-customer="${escapeAttr(credit.customerName)}">Select</button></td>
+              <td><button type="button" class="secondary-button" data-action="select-credit" data-customer="${escapeAttr(credit.customerName)}">Select</button></td>
             </tr>
           `).join("")}
         </tbody>
@@ -4095,17 +4345,72 @@ function syncBusinessLogoEditor(form, statusText = "") {
   const fallbackSrc = preview.dataset.fallbackSrc || PRODUCT_LOGO;
   const hasCustomLogo = Boolean(hidden.value);
   preview.src = hasCustomLogo ? hidden.value : fallbackSrc;
-  preview.alt = hasCustomLogo ? "Business logo preview" : "Suite logo preview";
+  preview.alt = hasCustomLogo ? "Business logo preview" : "Business placeholder preview";
   preview.parentElement?.classList.toggle("using-fallback", !hasCustomLogo);
 
   if (status instanceof HTMLElement) {
     status.textContent = statusText || (hasCustomLogo
       ? "Custom business logo ready for this workspace."
-      : "Using the suite logo until a business logo is uploaded.");
+      : "Using a company placeholder until a business logo is uploaded.");
   }
 }
 
-function handleBusinessLogoFileSelection(input) {
+function syncPaymentProfileForm(form) {
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const enabledMethods = new Set(
+    [...form.querySelectorAll('input[name="enabledMethods"]:checked')]
+      .map((input) => input instanceof HTMLInputElement ? input.value : "")
+      .filter(Boolean),
+  );
+
+  form.querySelectorAll("[data-payment-method-card]").forEach((card) => {
+    const method = card.getAttribute("data-payment-method-card") || "";
+    card.classList.toggle("active", enabledMethods.has(method));
+  });
+
+  form.querySelectorAll("[data-route-method]").forEach((card) => {
+    const method = card.getAttribute("data-route-method") || "";
+    const enabled = enabledMethods.has(method);
+    card.classList.toggle("enabled", enabled);
+    card.classList.toggle("disabled", !enabled);
+    card.querySelectorAll("input").forEach((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.readOnly = !enabled;
+      }
+    });
+    const badge = card.querySelector("[data-route-status]");
+    if (badge instanceof HTMLElement) {
+      badge.textContent = enabled ? "Enabled" : "Disabled";
+    }
+  });
+}
+
+function setBusinessLogoProcessing(form, isProcessing) {
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+  form.dataset.logoProcessing = isProcessing ? "true" : "false";
+  form.querySelectorAll('button[type="submit"]').forEach((button) => {
+    if (button instanceof HTMLButtonElement) {
+      button.disabled = isProcessing;
+    }
+  });
+}
+
+async function waitForPendingBusinessLogoUpload(form) {
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+  const pending = pendingLogoUploads.get(form);
+  if (pending) {
+    await pending;
+  }
+}
+
+async function handleBusinessLogoFileSelection(input) {
   if (!(input instanceof HTMLInputElement) || !(input.form instanceof HTMLFormElement)) return;
   const file = input.files?.[0];
   if (!file) return;
@@ -4114,8 +4419,8 @@ function handleBusinessLogoFileSelection(input) {
     input.value = "";
     return;
   }
-  if (file.size > 2 * 1024 * 1024) {
-    alert("Choose a business logo smaller than 2MB.");
+  if (file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+    alert(`Choose a business logo smaller than ${MAX_IMAGE_UPLOAD_SIZE_LABEL}.`);
     input.value = "";
     return;
   }
@@ -4123,12 +4428,87 @@ function handleBusinessLogoFileSelection(input) {
   const hidden = input.form.querySelector('input[name="logoDataUrl"]');
   if (!(hidden instanceof HTMLInputElement)) return;
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    hidden.value = typeof reader.result === "string" ? reader.result : "";
-    syncBusinessLogoEditor(input.form, `${file.name} is ready as the business logo.`);
-  };
-  reader.readAsDataURL(file);
+  const form = input.form;
+  const uploadTask = (async () => {
+    setBusinessLogoProcessing(form, true);
+    syncBusinessLogoEditor(form, "Preparing the business logo...");
+    hidden.value = await createBusinessLogoDataUrl(file);
+    syncBusinessLogoEditor(form, `${file.name} is ready as the business logo.`);
+    if (form.id === "business-profile-form") {
+      syncWorkspaceBrandPreviewFromBusinessForm(form);
+    }
+  })();
+
+  pendingLogoUploads.set(form, uploadTask);
+  try {
+    await uploadTask;
+  } finally {
+    if (pendingLogoUploads.get(form) === uploadTask) {
+      pendingLogoUploads.delete(form);
+    }
+    setBusinessLogoProcessing(form, false);
+  }
+}
+
+async function createBusinessLogoDataUrl(file) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose an image file for the business logo.");
+  }
+  if (file.type === "image/svg+xml") {
+    return readFileAsDataUrl(file);
+  }
+
+  const image = await loadImageFromFile(file);
+  const scale = Math.min(1, LOGO_IMAGE_MAX_DIMENSION / Math.max(image.naturalWidth || image.width || 1, image.naturalHeight || image.height || 1));
+  const width = Math.max(1, Math.round((image.naturalWidth || image.width || 1) * scale));
+  const height = Math.max(1, Math.round((image.naturalHeight || image.height || 1) * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return readFileAsDataUrl(file);
+  }
+
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  const optimizedBlob = await canvasToBlob(canvas, "image/webp", LOGO_IMAGE_OUTPUT_QUALITY)
+    || await canvasToBlob(canvas, "image/jpeg", LOGO_IMAGE_OUTPUT_QUALITY)
+    || file;
+  return readFileAsDataUrl(optimizedBlob);
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("That image could not be processed. Try another file."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("The selected image could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
 }
 
 document.addEventListener("click", async (event) => {
@@ -4251,6 +4631,9 @@ document.addEventListener("click", async (event) => {
         fileInput.value = "";
       }
       syncBusinessLogoEditor(form);
+      if (form.id === "business-profile-form") {
+        syncWorkspaceBrandPreviewFromBusinessForm(form);
+      }
       return;
     }
     if (action === "append-login-pin") {
@@ -4537,7 +4920,14 @@ document.addEventListener("click", async (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.type === "file" && target.dataset.action === "business-logo-upload") {
-    handleBusinessLogoFileSelection(target);
+    handleBusinessLogoFileSelection(target).catch((error) => {
+      target.value = "";
+      alert(error.message || "The selected image could not be uploaded.");
+    });
+    return;
+  }
+  if (target instanceof HTMLInputElement && target.form?.id === "payment-profile-form" && target.name === "enabledMethods") {
+    syncPaymentProfileForm(target.form);
     return;
   }
   if (!(target instanceof HTMLSelectElement)) return;
@@ -4566,6 +4956,11 @@ document.addEventListener("input", (event) => {
 
   if (target.form?.id === "login-form" && target.name === "workspaceKey") {
     state.authWorkspaceKey = target.value.trim();
+    return;
+  }
+
+  if (target.form?.id === "business-profile-form" && (target.name === "businessName" || target.name === "branchName")) {
+    syncWorkspaceBrandPreviewFromBusinessForm(target.form);
     return;
   }
 
@@ -4638,6 +5033,7 @@ document.addEventListener("submit", async (event) => {
 
   try {
     if (form.id === "setup-form") {
+      await waitForPendingBusinessLogoUpload(form);
       const data = buildWorkspaceSetupPayload(form);
       const result = await api("/api/auth/register", { method: "POST", body: data });
       state.authWorkspaceKey = result.workspace?.workspaceKey || data.workspaceKey || "";
@@ -4852,7 +5248,13 @@ document.addEventListener("submit", async (event) => {
     }
 
     if (form.id === "business-profile-form") {
-      await api("/api/admin/business-profile", { method: "PUT", body: formDataObject(form) });
+      await waitForPendingBusinessLogoUpload(form);
+      const result = await api("/api/admin/business-profile", { method: "PUT", body: formDataObject(form) });
+      applyBusinessProfileToState(result.businessProfile || {}, result.workspaceSummary || null);
+      if (result.workspaceConfig && state.bootstrap) {
+        state.bootstrap.workspaceConfig = result.workspaceConfig;
+      }
+      render();
       await refreshData();
       state.activeView = "control";
       return;

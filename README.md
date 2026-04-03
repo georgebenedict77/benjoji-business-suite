@@ -38,6 +38,14 @@ workspaces\<workspace-id>\benjoji.sqlite
 workspaces\<workspace-id>\backups\
 ```
 
+## Account Model
+
+- Benjoji Business Suite is the system brand, not a locked business workspace.
+- The public landing page and intro use the suite identity.
+- No client company account is bundled inside the product by default.
+- Each new business creates its own independent workspace with its own owner login, branding, payment routing, backups, and staff users.
+- Additional staff accounts are created by the owner inside that specific workspace only.
+
 ## Run
 
 ```powershell

@@ -123,9 +123,10 @@ const server = http.createServer(async (req, res) => {
         authMode: "password",
       });
 
+      const workspaceSummary = getWorkspaceSummary(workspace.workspaceKey);
       return sendJson(res, 201, {
         message: "Workspace created successfully.",
-        workspace,
+        workspace: workspaceSummary,
         user: loggedInUser || createdUser,
       });
     }
@@ -249,6 +250,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         message: "Business profile updated successfully.",
         businessProfile: updateBusinessProfile(workspaceKey, body, user.fullName),
+        workspaceSummary: getWorkspaceSummary(workspaceKey),
         workspaceConfig: getPublicWorkspaceConfig(workspaceKey),
       });
     }
