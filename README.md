@@ -72,6 +72,28 @@ The GitHub Pages landing site for the suite is published at:
 https://georgebenedict77.github.io/benjoji-business-suite/
 ```
 
+## Installing The App
+
+### Windows
+
+- Run the full suite locally with `npm start` or `.\start-app.ps1`
+- Open `http://127.0.0.1:3000` in Microsoft Edge or Google Chrome
+- Use the browser install option or the in-app `Install App` button when it appears
+
+### Android
+
+- The full operational app must be hosted on a secure public URL before Android installation works properly
+- Open the hosted app in Chrome
+- Use `Install App` or `Add to Home screen`
+
+### iPhone
+
+- The full operational app should be opened from its hosted public URL in Safari
+- Tap `Share`
+- Choose `Add to Home Screen`
+
+GitHub Pages currently hosts the public landing site only. The full business runtime still needs Node hosting for real checkout, stock, reporting, and workspace operations.
+
 ## Verification
 
 Run the non-destructive smoke test against an isolated test database:

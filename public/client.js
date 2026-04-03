@@ -13,6 +13,33 @@ const MAX_IMAGE_UPLOAD_SIZE_LABEL = "20MB";
 const LOGO_IMAGE_MAX_DIMENSION = 1600;
 const LOGO_IMAGE_OUTPUT_QUALITY = 0.9;
 const pendingLogoUploads = new WeakMap();
+let deferredInstallPrompt = null;
+
+function isStandaloneApp() {
+  return Boolean(globalThis.matchMedia?.("(display-mode: standalone)").matches || globalThis.navigator?.standalone === true);
+}
+
+function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(globalThis.navigator?.userAgent || "");
+}
+
+function canShowInstallAction() {
+  return !isStandaloneApp() && (Boolean(deferredInstallPrompt) || isIosDevice());
+}
+
+function installActionLabel() {
+  return deferredInstallPrompt ? "Install App" : "Add to Home Screen";
+}
+
+function installHelperText() {
+  if (deferredInstallPrompt) {
+    return "Install on Windows or Android from a supported browser for a cleaner app-style experience.";
+  }
+  if (isIosDevice()) {
+    return "On iPhone, open this in Safari, tap Share, then choose Add to Home Screen.";
+  }
+  return "";
+}
 
 function getReceiptPrintDefault() {
   return localStorage.getItem("benjoji_receipt_print_default") !== "false";
@@ -348,6 +375,7 @@ const state = {
   activeView: "dashboard",
   loading: false,
   error: "",
+  notice: "",
   authTab: "password",
   authPopupOpen: false,
   authChallenge: null,
@@ -389,6 +417,7 @@ const state = {
 };
 globalThis.__benjojiState = state;
 
+initInstallSupport();
 init();
 
 async function init() {
@@ -721,6 +750,7 @@ function renderAuthScreen() {
           ${navLinks.map((item) => `<a href="${item.href}">${escapeHtml(item.label)}</a>`).join("")}
         </div>
         <div class="auth-top-actions">
+          ${canShowInstallAction() ? `<button type="button" class="ghost-button install-button" data-action="install-app">${escapeHtml(installActionLabel())}</button>` : ""}
           <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password">Login</button>
           <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">Sign Up</button>
         </div>
@@ -733,9 +763,12 @@ function renderAuthScreen() {
             <h1>Give clients a business suite that feels premium from the very first page.</h1>
             <p>Benjoji Business Suite brings together checkout, stock control, staff access, and reporting in one refined platform built for businesses that want a serious operational system and a strong first impression.</p>
             <div class="auth-hero-actions">
+              ${canShowInstallAction() ? `<button type="button" class="ghost-button install-button" data-action="install-app">${escapeHtml(installActionLabel())}</button>` : ""}
               <button type="button" class="primary-button" data-action="open-auth-popup" data-tab="create-account">Create Workspace</button>
               <button type="button" class="secondary-button" data-action="open-auth-popup" data-tab="password">Login</button>
             </div>
+            ${installHelperText() ? `<div class="status-banner auth-status">${escapeHtml(installHelperText())}</div>` : ""}
+            ${state.notice ? `<div class="status-banner auth-status">${escapeHtml(state.notice)}</div>` : ""}
             ${state.error ? `<div class="status-banner error auth-status">${escapeHtml(state.error)}</div>` : ""}
             ${
               selectedWorkspace
@@ -4530,6 +4563,7 @@ document.addEventListener("click", async (event) => {
       state.authPopupOpen = true;
       state.authChallenge = null;
       state.error = "";
+      state.notice = "";
       state.authPin = "";
       return render();
     }
@@ -4545,12 +4579,34 @@ document.addEventListener("click", async (event) => {
       state.authPopupOpen = false;
       state.authChallenge = null;
       state.error = "";
+      state.notice = "";
       return render();
     }
     if (action === "reset-auth-challenge") {
       state.authChallenge = null;
       state.authTab = "password";
       state.error = "";
+      state.notice = "";
+      return render();
+    }
+    if (action === "install-app") {
+      state.error = "";
+      if (deferredInstallPrompt) {
+        const installEvent = deferredInstallPrompt;
+        deferredInstallPrompt = null;
+        installEvent.prompt();
+        const result = await installEvent.userChoice;
+        if (result?.outcome !== "accepted") {
+          deferredInstallPrompt = installEvent;
+          state.notice = "Install was cancelled. You can try again whenever you're ready.";
+        } else {
+          state.notice = "Installation started. Open the new app window or home-screen icon once it finishes.";
+        }
+      } else if (isIosDevice()) {
+        state.notice = "On iPhone, open this in Safari, tap Share, then choose Add to Home Screen.";
+      } else {
+        state.notice = "Install is available on supported browsers once the app is opened from a secure hosted URL.";
+      }
       return render();
     }
     if (action === "navigate") {
@@ -5345,6 +5401,21 @@ function buildPaymentPayload(data, fallbackPhone, scope) {
   };
 }
 
+function initInstallSupport() {
+  globalThis.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    state.notice = "";
+    render();
+  });
+
+  globalThis.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    state.notice = "Benjoji Business Suite was installed successfully.";
+    render();
+  });
+}
+
 function stageSalePaymentDraft(data) {
   const payload = buildPaymentPayload(data, state.saleDraft.phoneNumber, "sale");
   state.saleDraft.payments.push(payload);
@@ -5743,6 +5814,7 @@ function resetStateAfterLogin() {
 }
 
 function resetStateAfterLogout() {
+  state.notice = "";
   state.dashboard = null;
   state.dashboardDetail = "today-sales";
   state.inventoryDetail = "products";
