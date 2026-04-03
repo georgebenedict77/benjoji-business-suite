@@ -1,6 +1,7 @@
 out/
 node_modules/
 .edge-headless/
+dist/
 data/
 data-test/
 sandbox-data/

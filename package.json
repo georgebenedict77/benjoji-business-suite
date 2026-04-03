@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "build:windows-portable": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\build-windows-portable.ps1",
     "check:server": "node --check server.js",
     "check:client": "node --check public/client.js",
     "smoke": "node scripts/smoke-test.js",

@@ -101,6 +101,13 @@ https://render.com/deploy?repo=https://github.com/georgebenedict77/benjoji-busin
 - Open `http://127.0.0.1:3000` in Microsoft Edge or Google Chrome
 - Use the browser install option or the in-app `Install App` button when it appears
 
+### Windows Portable Download
+
+- The repository now includes a portable Windows packaging script: `npm run build:windows-portable`
+- The output ZIP is created under `dist\`
+- GitHub Actions can publish the same ZIP as a release asset when a version tag such as `v1.0.0` is pushed
+- Releases page: `https://github.com/georgebenedict77/benjoji-business-suite/releases`
+
 ### Android
 
 - The full operational app should be deployed to a secure public URL first
