@@ -22,6 +22,10 @@ jobs:
         with:
           node-version: 24
 
+      - name: Verify project
+        shell: pwsh
+        run: npm run verify
+
       - name: Build portable package
         shell: pwsh
         run: .\scripts\build-windows-portable.ps1

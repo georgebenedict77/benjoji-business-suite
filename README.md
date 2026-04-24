@@ -1,52 +1,119 @@
 # Benjoji Business Suite
 
-Benjoji Business Suite is a local-first business management platform for retailers, supermarkets, wholesalers, salons, service counters, and multi-branch businesses. Each business gets its own independent workspace, database, owner account, branding, payment routing, backups, and staff accounts.
+Business management platform for retail and service businesses that need point of sale, inventory, debt tracking, reporting, backups, and workspace control in one place.
 
-## What It Includes
+[![Verify Project](https://github.com/georgebenedict77/benjoji-business-suite/actions/workflows/verify.yml/badge.svg)](https://github.com/georgebenedict77/benjoji-business-suite/actions/workflows/verify.yml)
 
-- Branded landing page, intro, login, and independent business workspace setup
-- Desktop-friendly POS flow with basket-first checkout and popup payment finalization
+[Live Demo](https://georgebenedict77.github.io/benjoji-business-suite/) | [Windows Downloads](https://github.com/georgebenedict77/benjoji-business-suite/releases) | [Source Code](https://github.com/georgebenedict77/benjoji-business-suite)
+
+## Product Positioning
+
+Benjoji Business Suite is built as a multi-business platform, not a single-company internal system.
+
+- Each business gets its own workspace
+- Each workspace has its own owner account, staff, logo, receipt settings, payment routing, and backups
+- One client business does not depend on another client business account or data
+
+## Problem
+
+Many growing businesses still run daily operations across disconnected tools:
+
+- checkout on one side
+- stock records in another place
+- debt follow-up done manually
+- reporting delayed until end of day
+- business recovery ignored until something breaks
+
+That creates mistakes, missed payments, lost stock visibility, and weak operational control.
+
+## Solution
+
+Benjoji Business Suite brings the main operational flow into one platform:
+
+- cashier point of sale
+- inventory and stock movement
+- invoices and receipts
+- debt tracking and repayment
+- daily, weekly, monthly, and annual reporting
+- business branding and payment routing
+- local backups and restore workflow
+
+## Screenshots
+
+### Public Product Site
+
+![Public landing page](./screenshots/public-landing.png)
+
+### App Intro
+
+![App intro screen](./screenshots/app-intro.png)
+
+### App Login / Workspace Entry
+
+![App login screen](./screenshots/app-auth.png)
+
+## Features
+
+- Multi-business workspace setup
+- Branded public landing page and app intro
+- POS checkout with popup payment flow
 - Split payments across cash, M-Pesa, Airtel Money, card, bank transfer, Buy Goods, Paybill, and gift card
-- Inventory management with product creation, stock-in, stock-out, low-stock visibility, and stock records
-- Invoice desk, receipts, debt tracking, debt repayment, and payment ledger
-- Daily, weekly, monthly, and annual reports with calendar drill-down
-- Owner control center for business branding, payment routing, receipt rules, security policy, compliance notes, backups, and restore
-- Local backup snapshots plus restore workflow for recovery
-- Workspace isolation so one client business never depends on another client business account
+- Inventory management with product codes, stock in, stock out, and stock records
+- Invoice desk and receipt output
+- Debt tracking and debt repayment flow
+- Daily, weekly, monthly, and annual reports
+- Activity calendar with daily drill-down
+- Owner control center for branding, payment routing, security, compliance notes, and backups
+- Workspace isolation and owner-only sensitive actions
 
-## Stack
+## Architecture
+
+### Frontend
+
+- Vanilla JavaScript
+- Single-page app shell
+- Local install support through PWA files
+
+Main frontend files:
+
+- `public/client.js`
+- `public/client.css`
+- `public/index.html`
+
+### Backend
 
 - Node.js built-in HTTP server
-- Local SQLite database via `node:sqlite`
-- Vanilla JavaScript frontend
-- Local-first storage under the user app-data directory
+- SQLite via `node:sqlite`
+- Local-first workspace storage
 
-## Local Data
+Main backend files:
 
-The suite uses a persistent local app-data directory on Windows. New installs prefer:
+- `server.js`
+- `lib/workspace-auth.js`
+- `lib/workspace-business.js`
+- `lib/workspace-control.js`
+- `lib/workspace-db.js`
 
-```text
-C:\Users\<YourUser>\AppData\Local\Benjoji Business Suite\
-```
-
-If an older installation already exists under the previous folder name, the suite keeps using that legacy location automatically so existing data is not lost.
-
-Inside the active data directory, each business workspace has its own isolated database and backups:
+## Project Structure
 
 ```text
-workspaces\<workspace-id>\benjoji.sqlite
-workspaces\<workspace-id>\backups\
+.github/workflows/   CI and release automation
+docs/                GitHub Pages public site
+lib/                 backend logic and workspace services
+public/              frontend app shell and assets
+screenshots/         repo screenshots for presentation
+scripts/             smoke tests and packaging scripts
+server.js            HTTP server and API routes
 ```
 
-## Account Model
+## Local Setup
 
-- Benjoji Business Suite is the system brand, not a locked business workspace.
-- The public landing page and intro use the suite identity.
-- No client company account is bundled inside the product by default.
-- Each new business creates its own independent workspace with its own owner login, branding, payment routing, backups, and staff users.
-- Additional staff accounts are created by the owner inside that specific workspace only.
+### Requirements
 
-## Run
+- Node.js 24 or newer
+- Windows PowerShell for the helper scripts
+
+### Run
 
 ```powershell
 npm start
@@ -64,73 +131,7 @@ Then open:
 http://127.0.0.1:3000
 ```
 
-## Public Site
-
-The GitHub Pages landing site for the suite is published at:
-
-```text
-https://georgebenedict77.github.io/benjoji-business-suite/
-```
-
-## Full App Deployment
-
-The repository is prepared for real operation beyond the public landing site too.
-
-- Docker runtime: [Dockerfile](./Dockerfile)
-- deployment guide: [DEPLOYMENT.md](./DEPLOYMENT.md)
-
-## Installing The App
-
-### Windows
-
-- Run the full suite locally with `npm start` or `.\start-app.ps1`
-- Open `http://127.0.0.1:3000` in Microsoft Edge or Google Chrome
-- Use the browser install option or the in-app `Install App` button when it appears
-
-### Windows Portable Download
-
-- The repository now includes a portable Windows packaging script: `npm run build:windows-portable`
-- The output ZIP is created under `dist\`
-- GitHub Actions can publish the same ZIP as a release asset when a version tag such as `v1.0.0` is pushed
-- Releases page: `https://github.com/georgebenedict77/benjoji-business-suite/releases`
-
-### Android
-
-- The full operational app should be deployed to a secure public URL first
-- Open the hosted app in Chrome
-- Use `Install App` or `Add to Home screen`
-
-### iPhone
-
-- The full operational app should be opened from its hosted public URL in Safari
-- Tap `Share`
-- Choose `Add to Home Screen`
-
-GitHub Pages currently hosts the public landing site only. The full business runtime still needs Node hosting for real checkout, stock, reporting, and workspace operations.
-
-## Local Network Preview
-
-To preview the suite from another device on the same Wi-Fi network:
-
-```powershell
-.\start-lan.ps1
-```
-
-This exposes the app on your local network and prints the phone/tablet URL. It is useful for preview and testing, but a proper public HTTPS deployment is still the right path for full mobile installability.
-
 ## Verification
-
-Run the non-destructive smoke test against an isolated test database:
-
-```powershell
-npm run smoke
-```
-
-Run the HTTP workspace smoke test against a temporary isolated server:
-
-```powershell
-npm run smoke:http
-```
 
 Run the full local verification bundle:
 
@@ -138,16 +139,77 @@ Run the full local verification bundle:
 npm run verify
 ```
 
-## Project Structure
+This includes:
+
+- syntax checks
+- workspace smoke test
+- HTTP smoke test
+
+## Data and Backups
+
+The suite uses a persistent local app-data directory on Windows.
+
+New installs prefer:
 
 ```text
-lib/         backend business logic, workspace auth, workspace control, storage
-public/      landing page, app shell, POS, reports, styling, assets
-scripts/     local verification scripts
-server.js    HTTP server and API routes
+C:\Users\<YourUser>\AppData\Local\Benjoji Business Suite\
 ```
 
-## Operational Notes
+Each workspace stores its own data under:
 
-- Payment provider approvals are currently simulated workflow approvals inside the suite. Live provider integrations still need real business credentials and provider APIs.
-- Receipt printing is browser-based today. Dedicated thermal/POS printer integration can be added later per client hardware.
+```text
+workspaces\<workspace-id>\benjoji.sqlite
+workspaces\<workspace-id>\backups\
+```
+
+## Downloads
+
+Portable Windows builds are published through GitHub Releases:
+
+- [Latest Releases](https://github.com/georgebenedict77/benjoji-business-suite/releases)
+
+You can also build a local portable package with:
+
+```powershell
+npm run build:windows-portable
+```
+
+## Demo and Deployment
+
+### Public Demo
+
+- GitHub Pages marketing site:
+  [https://georgebenedict77.github.io/benjoji-business-suite/](https://georgebenedict77.github.io/benjoji-business-suite/)
+
+### Full App
+
+The real business runtime still runs through the Node + SQLite app.
+
+- local desktop use is ready now
+- same-network preview is available with `.\start-lan.ps1`
+- full public hosted runtime can be added later with a proper Node host
+
+## CI
+
+GitHub Actions now verifies the project automatically on push and pull request.
+
+Checks include:
+
+- `node --check server.js`
+- `node --check public/client.js`
+- `npm run smoke`
+- `npm run smoke:http`
+
+## License
+
+This repository is currently distributed under the proprietary license in [LICENSE](./LICENSE).
+
+## Changelog
+
+Release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
+
+## Current Notes
+
+- Payment approvals are still simulated workflow approvals until real provider credentials are connected
+- Receipt printing is browser-based today, not full thermal printer integration yet
+
